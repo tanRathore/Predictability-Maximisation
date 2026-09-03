@@ -1,0 +1,4 @@
+language,baseline,sentence_length,max_sentences,random_samples_per_sentence,n_sentences,mean_real_dl,mean_real_ic,mean_p_dl_random_beats_real,mean_p_ic_random_beats_real,mean_p_both_random_dominates_real,mean_p_real_dominates_random
+English,projective_like,12,50,200,50,28.18,5.56,0.4770000000000001,0.6681,0.37620000000000003,0.4083
+Hindi,projective_like,12,50,200,50,23.84,4.04,0.29230000000000006,0.8286,0.27209999999999995,0.37839999999999996
+Japanese,projective_like,12,50,200,50,21.44,5.84,0.215,0.7916000000000001,0.2058,0.44400000000000006

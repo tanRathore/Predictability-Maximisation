@@ -1,0 +1,4 @@
+language,baseline,sentence_length,max_sentences,random_samples_per_sentence,n_sentences,mean_real_dl,mean_real_ic,mean_p_dl_random_beats_real,mean_p_ic_random_beats_real,mean_p_both_random_dominates_real,mean_p_real_dominates_random
+English,uniform,12,50,200,50,28.18,5.56,0.021699999999999994,0.3728,0.019100000000000002,0.8159000000000001
+Hindi,uniform,12,50,200,50,23.68,3.88,0.012599999999999998,0.573,0.011999999999999997,0.7081999999999999
+Japanese,uniform,12,50,200,50,20.52,4.2,0.0073,0.5226,0.0073,0.7356

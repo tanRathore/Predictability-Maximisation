@@ -1,0 +1,2582 @@
+./
+    construct_output_DL_matched_RLAs.py:
+        # Using NetworkX package and conllu package
+        import os
+        from io import open
+        from conllu import parse
+        import networkx as nx
+        from operator import itemgetter
+        from Measures import *
+        from Measures_rand import *
+        import random
+        import treegen as gen
+        from baseline_conditions_DL_matched_RLAs import *
+        
+        directory = "./SUD"                   # directory containing the UD scheme tree files in CONLLU format
+        ud_files = []
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith('train.conllu'):
+                    fullpath = os.path.join(root, file)
+                    ud_files.append(fullpath)            # creates a list of path of all files (file of each language) from the directory
+        
+        for i in ud_files:                                       # reads file of each language one by one
+            lang = str(i).replace("./SUD", "")
+            lang=lang.replace("-sud-train.conllu", "")            # lang variable stores the language code
+            lang=lang.replace("-sud-test.conllu", "")
+            data_file = open(str(i),'r',encoding='utf-8').read()
+            sentences = []
+            sentences = parse(data_file)                         # parses the CONLLU format
+            sent_id=0
+            print(lang)
+            num_sent=0
+            num_edge=0
+            for sentence in sentences[0:]:
+                sent_id+=1
+                print(sent_id)
+                if sent_id>1:
+                    num_sent += 1
+                    tree = nx.DiGraph()                              # An empty directed graph (i.e., edges are uni-directional)
+                    for nodeinfo in sentence[0:]:                    # retrieves information of each node from dependency tree in UD format
+                        entry=list(nodeinfo.items())
+                        if not entry[7][1]=='punct':
+                            tree.add_node(entry[0][1], form=entry[1][1], lemma=entry[2][1], upostag=entry[3][1], xpostag=entry[4][1], feats=entry[5][1], head=entry[6][1], deprel=entry[7][1], deps=entry[8][1], misc=entry[9][1])                #adds node to the directed graph
+                    ROOT=0
+                    tree.add_node(ROOT)                            # adds an abstract root node to the directed graph
+        
+                    for nodex in tree.nodes:
+                        if not nodex==0:
+                            if tree.has_node(tree.nodes[nodex]['head']):                                         # to handle disjoint trees
+                                tree.add_edge(tree.nodes[nodex]['head'],nodex,drel=tree.nodes[nodex]['deprel'])       # adds edges as relation between nodes
+        
+                    n=len(tree.edges)
+                    if n<12 and n>1:
+                        get = Compute_measures(tree)
+                        num_cross_real=0
+                        for edgex in tree.edges:
+                            if not edgex[0]==ROOT:
+                                if get.is_projective(edgex):                   # checks if edge is projective or not
+                                    num_cross_real += 0
+                                else:
+                                    num_cross_real += 1
+        
+                        generate = Random_base(tree)                       # initiates object for computing measures for the real tree
+                        ls_random = generate.gen_random(num_cross_real)    # stores the list of random generated trees
+        
+                        if ls_random:
+                            treex=ls_random[0]
+                            print(ls_random)
+                            print(tree.edges)
+                            print(treex.edges)
+                            root=1000
+                            find=Compute_measures_rand(treex,root)          # initiates object for computing measures for the random tree
+                            max_arity_rand=find.arity()[0]                               # gives maximum arity present in the tree
+                            avg_arity_rand=find.arity()[1]
+                            projection_degree_rand=find.projection_degree(root)          # gives the projection degree of the tree i.e., size of longest projection chain in the tree
+                            gap_degree_rand=find.gap_degree(root)                        # gives gap_degree of the tree
+                            k_illnest_rand=find.illnestedness(root,gap_degree_rand)
+                            sent_len=0
+                            for edgex in treex.edges:
+                                if not edgex[0]==root:
+                                    direction_rand = find.dependency_direction(edgex)    # direction of the edge in terms of relative linear order of head and its dependent
+                                    dep_distance_rand=find.dependency_distance(edgex)    # gives the distance between nodes connected by an edge
+                                    dep_depth_rand=find.dependency_depth(edgex)
+                                    #print(dep_distance_rand)
+                                    #print("\n")
+                                    if find.is_projective(edgex):                   # checks if edge is projective or not
+                                        projectivity_rand=1
+                                    else:
+                                        projectivity_rand=0
+                                    edge_degree_rand=find.edge_degree(edgex)             # gives the no. of edges crossing an edge
+                                    endpoint_cross_rand=find.endpoint_crossing(edgex)    # no. of heads which immediately dominates the nodes which causes non-projectivity in an edge span
+                                    HDD_rand=find.hdd(edgex)
+                                    results1 = open('DL_matched_RLAs.csv','a')
+                                    results1.write(str(lang)+"\t"+"random"+"\t"+str(sent_id)+"\t"+str(n)+"\t"+str(max_arity_rand)+"\t"+str(avg_arity_rand)+"\t"+str(projection_degree_rand)+"\t"+str(gap_degree_rand)+"\t"+str(k_illnest_rand)+"\t"+str(edgex)+"\t"+str(direction_rand)+"\t"+str(dep_distance_rand)+"\t"+str(dep_depth_rand)+"\t"+str(projectivity_rand)+"\t"+str(edge_degree_rand)+"\t"+str(endpoint_cross_rand)+"\t"+str(HDD_rand)+"\n")
+                                    results1.close()
+                            #Computes the measures for the real tree
+                            max_arity_real=get.arity()[0]                               # gives maximum arity present in the tree
+                            avg_arity_real=get.arity()[1]
+                            projection_degree_real=get.projection_degree(0)          # gives the projection degree of the tree i.e., size of longest projection chain in the tree
+                            gap_degree_real=get.gap_degree(0)                        # gives gap_degree of the tree
+                            k_illnest_real=get.illnestedness(0,gap_degree_real)
+                            sent_len=0
+                            for edgey in tree.edges:
+                                if not edgey[0]==0:
+                                    direction_real = get.dependency_direction(edgey)    # direction of the edge in terms of relative linear order of head and its dependent
+                                    dep_distance_real=get.dependency_distance(edgey)    # gives the distance between nodes connected by an edge
+                                    dep_depth_real=get.dependency_depth(edgey)
+                                    #print(dep_distance_real)
+                                    if get.is_projective(edgey):                   # checks if edge is projective or not
+                                        projectivity_real=1
+                                    else:
+                                        projectivity_real=0
+                                    edge_degree_real=get.edge_degree(edgey)             # gives the no. of edges crossing an edge
+                                    endpoint_cross_real=get.endpoint_crossing(edgey)    # no. of heads which immediately dominates the nodes which causes non-projectivity in an edge span
+                                    HDD_real=get.hdd(edgey)
+                                    results2 = open('DL_matched_RLAs.csv','a')
+                                    results2.write(str(lang)+"\t"+"real"+"\t"+str(sent_id)+"\t"+str(n)+"\t"+str(max_arity_real)+"\t"+str(avg_arity_real)+"\t"+str(projection_degree_real)+"\t"+str(gap_degree_real)+"\t"+str(k_illnest_real)+"\t"+str(edgey)+"\t"+str(direction_real)+"\t"+str(dep_distance_real)+"\t"+str(dep_depth_real)+"\t"+str(projectivity_real)+"\t"+str(edge_degree_real)+"\t"+str(endpoint_cross_real)+"\t"+str(HDD_real)+"\n")
+                                    results2.close()
+                            print("\n-----------------\n"+str(tree.edges))
+--------------------
+    depgraph.py:
+        #!/usr/bin/python3
+        """ Functions on dependency graphs represented as objects with the networkx.DiGraph interface. """
+        import bisect
+        import os.path
+        import operator
+        import tempfile
+        import functools
+        from collections import Counter, namedtuple, defaultdict
+        
+        import networkx as nx
+        from rfutils import sliding, the_only
+        
+        
+        class EquableDiGraph(nx.DiGraph):
+            def __eq__(self, other):
+                return self.node == other.node and self.edge == other.edge
+        
+        
+        # get_attr : String -> (DiGraph x Int -> Maybe String)
+        def get_attr(attr):
+            """ Produce a function which gets the given attribute of a sentence at a
+            node, returning None if the attribute cannot be found. """
+            def get(s, n):
+                return s.nodes[n].get(attr)
+            return get
+        
+        
+        # attr_of : String x DiGraph -> [String]
+        def attr_of(attr, s):
+            """ Reduce a sentence to an iterable of attribute values,
+            one for each non-root node. """
+            return [s.nodes[n].get(attr, None) for n in sorted(s.nodes())]
+        
+        
+        words_of = functools.partial(attr_of, 'word')
+        lemmas_of = functools.partial(attr_of, 'lemma')
+        
+        
+        # phrase_of : DiGraph x Int -> [Int]
+        def phrase_of(s, word_id):
+            """ Return a node index and the indices of all its transitive descendents,
+            in order. """
+            words = sorted(nx.descendants(s, word_id))
+            bisect.insort(words, word_id)
+            return words
+        
+        
+        def test_phrase_of():
+            t = nx.DiGraph([(3, 2), (2, 1), (2, 0), (3, 5), (5, 4), (5, 6)])
+            assert phrase_of(t, 0) == [0]
+            assert phrase_of(t, 2) == [0, 1, 2]
+            assert phrase_of(t, 5) == [4, 5, 6]
+            assert phrase_of(t, 3) == [0, 1, 2, 3, 4, 5, 6]
+        
+        
+        def draw_sentence(s, **kwds):
+            import nxpd
+            for node in sorted(s.nodes()):
+                attr = s.nodes[node]
+                if 'word' not in attr:
+                    attr['label'] = str(node)
+                elif attr['word'].startswith('_'):
+                    attr['label'] = attr['pos'] + '_%s' % node
+                else:
+                    attr['label'] = attr['word'] + '_%s' % node
+                attr['label'] = attr['label'].replace(":", "/")
+            for e1, e2 in s.edges():
+                attr = s.edges[e1,e2]
+                if 'deptype' in attr:
+                    attr['label'] = attr['deptype']
+                else:
+                    attr['label'] = 'NONE'
+                attr['label'] = attr['label'].replace(":", "/")
+            nxpd.draw(s, **kwds)
+        
+        
+        def sentence_to_latex(s, with_deplen=False):
+            words = [
+                latex_escape(node.get('word', str(n)))
+                for n, node in list(s.nodes(data=True))
+            ]
+            deptext = " \& ".join(words)
+        
+            def label(h, d, dt):
+                if with_deplen:
+                    return abs(h - d)
+                elif dt is None:
+                    return ''
+                else:
+                    return dt
+            depedges = "\n".join(
+                "\depedge{%s}{%s}{%s}" % (h + 1, d + 1, label(h, d, dt))
+                for h, d, dt in s.edges(data='deptype')
+                if dt != 'root'
+            )
+            return LATEX_DEPENDENCY_TEMPLATE % (deptext, depedges)
+        
+        
+        LATEX_DEPENDENCY_TEMPLATE = """
+        \\begin{dependency}[theme=simple]
+          \\begin{deptext}
+            %s \\\\
+          \\end{deptext}
+            %s
+        \\end{dependency}
+        """
+        
+        LATEX_WIDE_DOCUMENT_TEMPLATE = """
+        \\documentclass{article}
+        \\usepackage[landscape]{geometry}
+        \\usepackage{tikz-dependency}
+        \\usepackage[utf8]{inputenc}
+        \\begin{document}
+        %s
+        \\end{document}
+        """
+        
+        LATEX_DOCUMENT_TEMPLATE = """
+        \\documentclass{article}
+        \\usepackage{tikz-dependency}
+        \\usepackage[utf8]{inputenc}
+        \\usepackage[normalem]{ulem}
+        \\begin{document}
+        %s
+        \\end{document}
+        """
+        
+        TO_ESCAPE = frozenset("$")
+        
+        
+        def latex_escape(xs):
+            def gen():
+                for x in xs:
+                    if x in TO_ESCAPE:
+                        yield "\\"
+                    yield x
+            return "".join(gen())
+        
+        
+        def to_latex_document(content):
+            """ Insert content into a LaTeX document template. """
+            return LATEX_WIDE_DOCUMENT_TEMPLATE % content
+        
+        
+        def show_latex(doctext, cleanup=False):
+            """ Show a pdf of a LaTeX document with doctext. 
+            Only really expected to work on OS X.
+            """
+            import sh
+            with tempfile.NamedTemporaryFile(mode='w+t', encoding='utf-8') as docout:
+                print(doctext, file=docout)
+                docout.flush()
+                sh.pdflatex(docout.name)
+                output_filename = os.path.basename(docout.name) + ".pdf"
+                sh.open(output_filename)
+                if cleanup:
+                    sh.rm(output_filename)
+                    #try:
+                    #    sh.clean_tex()
+                    #except sh.ErrorReturnCode_1:
+                    #    pass
+        
+        
+        def show_sentence_latex(s, **kwds):
+            return show_latex(to_latex_document(sentence_to_latex(s, **kwds)))
+        
+        
+        def show_sentences_latex(ss, **kwds):
+            text = "\n".join(sentence_to_latex(s, **kwds) for s in ss)
+            show_latex(to_latex_document(text))
+        
+        def sentence_to_conllu(s):
+            def gen():
+                for n in sorted(s.nodes()):
+                    if n != 0:
+                        nodedict = s.nodes[n]
+                        head = head_of(s, n)
+                        yield (
+                            str(n),
+                            nodedict['word'],
+                            nodedict['pos'],
+                            nodedict['pos2'],
+                            nodedict['infl'],
+                            str(head),
+                            s.edges[head,n]['deptype'],
+                            "_", # TODO
+                            "_", # TODO
+                        )
+            return map("\t".join, gen())
+        
+        # roots_of : DiGraph -> Iterator Int     
+        def roots_of(s):
+            """ Yield the root nodes of a sentence. """
+            for node, in_degree in dict(s.in_degree()).items():
+                if in_degree == 0:
+                    yield node
+        
+        
+        def test_roots_of():
+            t = nx.DiGraph([(0, 1), (1, 2), (2, 3)])
+            assert list(roots_of(t)) == [0]
+        
+            g = nx.DiGraph([(0, 1), (2, 3)])
+            assert sorted(roots_of(g)) == [0, 2]
+        
+            g = nx.DiGraph([(0, 1), (2, 1)])
+            assert sorted(roots_of(g)) == [0, 2]
+        
+        
+        # root_of : DiGraph -> Int    
+        def root_of(s):
+            """ Return the single root node of a sentence; 
+            die if there are 0 roots or more than 1 root. 
+            """
+            return the_only(roots_of(s))
+        
+        
+        def test_root_of():
+            t = nx.DiGraph([(2, 0), (0, 1), (2, 3), (3, 4)])
+            assert root_of(t) == 2
+        
+            g = nx.DiGraph([(0, 1), (2, 1)])
+            import nose.tools
+            nose.tools.assert_raises(ValueError, root_of, g)
+        
+        
+        def is_singly_rooted(s):
+            return len(list(roots_of(s))) == 1
+        
+        Gap = namedtuple('Gap', ['code'])
+        
+        def is_gap(x):
+            return isinstance(x, Gap)
+        
+        # lowest_common_ancestor : DiGraph x Int x Int -> Int
+        def lowest_common_ancestor(s, n1, n2):
+            s_u = s.to_undirected()
+            path = nx.shortest_path(s_u, n1, n2)
+            subtree = s.subtree(path)
+            return root_of(subtree)
+        
+        def gaps_under(s, word_id):
+            """ Return the indices in the immediate phrase for the gaps under a
+            given node. Assumes tree-structured sentence. """
+            assert is_tree(s)
+            immediate_phrase = immediate_phrase_of(s, word_id)
+            immediate_phrase_set = set(immediate_phrase)
+            blocks = blocks_of(s, word_id)
+            for i, block in enumerate(blocks):
+                if i == 0:
+                    pass
+                else:
+                    left_endpoint = block[0]
+                    right_endpoint = block[-1]
+                    previous_right_endpoint = blocks[i - 1][-1]
+                    gap_range = range(previous_right_endpoint + 1, left_endpoint)
+                    subforest = s.subgraph(gap_range)
+                    left_endpoint_head = left_endpoint
+                    while left_endpoint_head not in immediate_phrase_set:
+                        left_endpoint_head = head_of(s, left_endpoint_head)
+                    i_gap = immediate_phrase.index(left_endpoint_head)
+                    for root in roots_of(subforest):
+                        yield i_gap, Gap(classify_gap(s, word_id, root))
+                    
+        
+        def classify_gap(s, word_id, root):
+            s_u = s.to_undirected()
+            path = nx.shortest_path(s_u, word_id, root)
+            def gen():
+                for n1, n2 in zip(path, path[1:]):
+                    if heads_of(s, n1) == [n2]:
+                        yield 'h'
+                    else:
+                        yield 'd'
+            return "".join(gen())
+        
+        
+        def test_gaps_under():
+            t = nx.DiGraph([(0, 1), (1, 3), (0, 2), (1, 4)]) 
+            assert list(gaps_under(t, 0)) == []
+            assert list(gaps_under(t, 1)) == [(1, Gap('hd'))]
+        
+            t = nx.DiGraph([(4, 3), (3, 1), (4, 2), (4, 0), (3, 5)])
+            assert list(gaps_under(t, 4)) == []
+            assert list(gaps_under(t, 3)) == [(1, Gap('hd')), (2, Gap('h'))], list(gaps_under(t, 3))
+        
+            roger_t = nx.DiGraph([
+                (0, 1), (0, 2),
+                (1, 3), (1, 4),
+                (2, 5), (2, 10),
+                (3, 6), (3, 7),
+                (4, 8), (4, 9)
+            ])
+            assert list(gaps_under(roger_t, 2)) == [
+                (1, Gap('hdd')),
+                (1, Gap('hdd')),
+                (2, Gap('hddd')),
+                (2, Gap('hddd')),
+                (2, Gap('hddd')),
+                (2, Gap('hddd')),
+            ]
+        
+            rr_t = nx.DiGraph([(0, 1), (1, 2), (2, 4), (0, 3)])
+            assert list(gaps_under(rr_t, 2)) == [(1, Gap('hhd'))]
+        
+        
+        def immediate_phrase_of(s, word_id, with_gaps=False):
+            """ Return the dependents of word_id in s along with word_id. """
+            words = dependents_of(s, word_id)
+            words.append(word_id)
+            words.sort()
+            if with_gaps:
+                the_gaps = list(gaps_under(s, word_id))
+                if the_gaps:
+                    indices, gaps = zip(*gaps_under(s, word_id))
+                    return list(insert_multiple(words, indices, gaps))
+                else:
+                    return words
+            else:
+                return words
+        
+        
+        def test_immediate_phrase_of():
+            t = nx.DiGraph([(2, 0), (2, 1), (2, 3), (3, 4), (3, 5), (5, 6)])
+            assert immediate_phrase_of(t, 2) == [0, 1, 2, 3]
+            assert immediate_phrase_of(t, 3) == [3, 4, 5]
+            assert immediate_phrase_of(t, 5) == [5, 6]
+            assert immediate_phrase_of(t, 0) == [0]
+        
+            t = nx.DiGraph([(0, 1), (1, 3), (0, 2)])
+            assert immediate_phrase_of(t, 0, with_gaps=True) == [0, 1, 2]
+            assert immediate_phrase_of(t, 1, with_gaps=True) == [1, Gap('hd'), 3]
+        
+        
+        def num_words_in_phrase(s, word_id):
+            return len(nx.descendants(s, word_id)) + 1
+        
+        
+        def test_num_words_in_phrase():
+            t = nx.DiGraph([(0, 1), (1, 2), (2, 3)])
+            assert num_words_in_phrase(t, 0) == 4
+            assert num_words_in_phrase(t, 1) == 3
+            assert num_words_in_phrase(t, 2) == 2
+            assert num_words_in_phrase(t, 3) == 1
+        
+        
+        # head_of : DiGraph x Int -> Int    
+        def head_of(s, word_id):
+            """ Return the single head of word_id in s. 
+            Die if word_id has 0 or more than 1 heads. 
+            """
+            heads = heads_of(s, word_id)
+            if len(heads) == 1:
+                return heads[0]
+            elif len(heads) > 1:
+                raise ValueError("Multiple heads for word %s in sentence %s" % (word_id, s))
+            else:
+                raise ValueError("No head for word %s in sentence %s" % (word_id, s))
+        
+        # get_head_of : DiGraph x Int -> Maybe Int
+        def get_head_of(s, word_id, default=None):
+            """ Return the single head of word_id in s, or None if it has no head.
+            Die if word_id has more than one head. """
+            heads = heads_of(s, word_id)
+            if heads:
+                return the_only(heads)
+            else:
+                return default
+        
+        
+        def test_head_of():
+            t = nx.DiGraph([(1, 0), (1, 2), (2, 3)])
+            assert head_of(t, 0) == 1
+            assert head_of(t, 2) == 1
+            assert head_of(t, 3) == 2
+        
+            import nose.tools
+            nose.tools.assert_raises(ValueError, head_of, t, 1)
+        
+        
+        def deptype_to_head_of(s, word_id):
+            """ Return the dependency type of the arc to word_id from its head in s. """
+            h = head_of(s, word_id)
+            return s.edges[h,word_id]['deptype']
+        
+        
+        def test_deptype_to_head_of():
+            t = nx.DiGraph([(0, 1), (1, 2), (2, 3)])
+            t.edges[2,3]['deptype'] = 'A'
+            t.edges[1,2]['deptype'] = 'B'
+            assert deptype_to_head_of(t, 3) == 'A'
+            assert deptype_to_head_of(t, 2) == 'B'
+        
+        
+        def dependents_of(s, word_id):
+            return list(nx.DiGraph.successors(s, word_id))
+        
+        def heads_of(s, word_id):
+            return list(nx.DiGraph.predecessors(s, word_id))
+        
+        Dependents = namedtuple('Dependents', ['left', 'right'])
+        
+        
+        def left_right_dependents_of(s, word_id):
+            ds = sorted(dependents_of(s, word_id))
+            middle = bisect.bisect(ds, word_id)
+            return Dependents(ds[:middle], ds[middle:])
+        
+        
+        def left_dependents_of(s, word_id):
+            ds = sorted(dependents_of(s, word_id))
+            return ds[:bisect.bisect(ds, word_id)] # would linear search be faster?
+        
+        
+        def test_left_dependents_of():
+            t = nx.DiGraph([(2, 1), (1, 0), (2, 5), (5, 3), (5, 4)])
+            assert left_dependents_of(t, 2) == [1]
+            assert left_dependents_of(t, 1) == [0]
+            assert left_dependents_of(t, 5) == [3, 4]
+            assert left_dependents_of(t, 0) == []
+        
+        
+        def right_dependents_of(s, word_id):
+            ds = sorted(dependents_of(s, word_id))
+            return ds[bisect.bisect(ds, word_id):]
+        
+        
+        def test_right_dependents_of():
+            t = nx.DiGraph([(2, 1), (1, 0), (2, 3), (3, 4), (3, 5)])
+            assert right_dependents_of(t, 2) == [3]
+            assert right_dependents_of(t, 3) == [4, 5]
+            assert right_dependents_of(t, 5) == []
+            
+        
+        is_ancestor = nx.has_path
+        
+        
+        def is_descendent(s, word_id_1, word_id_2):
+            return is_ancestor(s, word_id_2, word_id_1)
+        
+        
+        def is_tree(s):
+            degrees = Counter(degree for n, degree in dict(s.in_degree()).items())
+            return set(degrees.keys()) == {0, 1} and degrees[0] == 1 and degrees[1] > 0
+        
+        
+        def block_endpoints_of(s):
+            """ Kuhlmann's (2012: 364-5) O(n) algorithm to identify block endpoints """
+            # Comments are from Kuhlmann's paper.
+            # We start at a virtual root node which serves as the parent of the real
+            # root node. 
+            current = None
+            marked = {current}
+            found_blocks_right = defaultdict(list)
+            found_blocks_left = defaultdict(list)
+            
+            # For each node n in the precedence order of D, we follow the shortest path
+            # from the node current to n.
+            for node in sorted(s.nodes()):
+                # To determine this path, we compute the lowest common ancestor lca of
+                # the two nodes, using a set of markings on the nodes. At the beginning
+                # of each iteration of the for loop, all ancestors of current (including
+                # the virtual root node) are marked; therefore, we find lca by going
+                # upwards from next to the first node that is marked. 
+                lca = node
+                stack = []  # will contain the path from node to its lca with current
+                
+                # lca moves up from node to the lowest marked thing
+                while lca not in marked:
+                    stack.append(lca)
+                    lca = get_head_of(s, lca)
+                    
+                # To restore the loop invariant, we then unmark all nodes on the path
+                # from current to lca.
+                # current moves up to lca
+                while current != lca:
+                    # move up from current to the parent of current
+                    marked.remove(current)
+                    found_blocks_right[current].append(node - 1)
+                    current = get_head_of(s, current)
+                    
+                # current moves down to node
+                while stack:
+                    current = stack.pop()
+                    marked.add(current)
+                    # Each time we move down from a node to one of its children, we
+                    # record the information that next is the left endpoint of a block
+                    # of current.
+                    found_blocks_left[current].append(node)
+                assert current == node
+        
+            # The while loop takes us from the last node of the dependency tree back to
+            # the virtual root node.
+            while current is not None:
+                # |w| is the right endpoint of a block of current
+                # move up from current to the parent of current
+                marked.remove(current)
+                # Symmetrically, each time we move up from a node to its parents, we
+                # record the information that next - 1 is the right endpoint of a block
+                # of current.
+                found_blocks_right[current].append(node)
+                current = get_head_of(s, current)
+                
+            return dict(found_blocks_left), dict(found_blocks_right)
+        
+        
+        def blocks_of(s, word_id=None):
+            """ Blocks of a dependency tree.
+            blocks_of(tree) returns the dict of blocks for all nodes. 
+            blocks_of(tree, n) returns the blocks of node n.
+            
+            Kuhlmann (2013: 363): "For a node u of D, a block of u is the longest 
+            segment consisting of descendents of u. This means that the left endpoint of
+            a block of u either is the first node in its component, or is preceded by a 
+            node that is not a descendent of u. A symmetric property holds for the right
+            endpoint." 
+            """
+            left_endpoints, right_endpoints = block_endpoints_of(s)
+            assert left_endpoints.keys() == right_endpoints.keys()
+            d = {
+                n : [
+                    list(range(l, r + 1))
+                    for l, r in zip(left_endpoints[n], right_endpoints[n])
+                ]
+                for n in left_endpoints.keys()
+            }
+            if word_id is None:
+                return d
+            else:
+                return d[word_id]
+        
+        
+        def test_blocks_of():
+            # Example from Kuhlmann (2013: 363)
+            s = nx.DiGraph([(3, 2), (2, 1), (3, 4), (4, 8), (2, 5), (5, 7), (7, 6)])
+            blocks = blocks_of(s)
+            assert blocks[2] == [[1, 2], [5, 6, 7]]
+            assert blocks_of(s, 2) == blocks[2]
+        
+        
+        def block_degree(s):
+            """ Block degree of a dependency tree (Kuhlmann, 2013) """
+            return max(len(blocks) for blocks in blocks_of(s).values())
+        
+        
+        def gap_degree(s):
+            """ Gap degree (block degree - 1) of a sentence. Maximum number of
+            discontinuities in phrases of the sentence. """
+            return block_degree(s) - 1
+        
+        
+        def test_gap_degree():
+            zero = nx.DiGraph([(0, 1), (1, 2), (2, 3)])
+            assert gap_degree(zero) == 0
+        
+            one = nx.DiGraph([(0, 1), (1, 3), (0, 2)])
+            assert gap_degree(one) == 1
+        
+            one2 = nx.DiGraph([(0, 1), (0, 2), (1, 3), (2, 4)])
+            assert gap_degree(one2) == 1
+        
+            two = nx.DiGraph([(0, 1), (0, 2), (0, 4), (1, 3), (1, 5)])
+            assert gap_degree(two) == 2
+        
+        
+        def is_well_nested(s):
+            """ Check if a sentence is well-nested in the sense of Kuhlmann (2013). """
+            raise NotImplementedError
+        
+        
+        def _test_is_well_nested():
+            wn = nx.DiGraph([(0, 1), (0, 2), (0, 4), (1, 3), (1, 5)])
+            assert is_well_nested(wn)
+            
+            nwn = nx.DiGraph([(0, 1), (1, 3), (0, 2), (2, 4)])
+            assert not is_well_nested(nwn)
+        
+        
+        def is_monotonic(cmp, xs):
+            try:
+                return all(cmp(x, y) for x, y in sliding(xs, 2))
+            except StopIteration: # TODO fix sliding so this doesn't need to be special
+                return True
+        
+        
+        def test_is_monotonic():
+            mle = [-1, 2, 3, 4, 4]
+            assert is_monotonic(operator.le, mle)
+            assert not is_monotonic(operator.lt, mle)
+            assert not is_monotonic(operator.gt, mle)
+            assert not is_monotonic(operator.ge, mle)
+        
+            ml = [-100, 1, 3, 4]
+            assert is_monotonic(operator.le, ml)
+            assert is_monotonic(operator.lt, ml)
+            assert not is_monotonic(operator.gt, ml)
+            assert not is_monotonic(operator.ge, ml)
+        
+            mge = [4, 4, 3, 2, -1]
+            assert not is_monotonic(operator.le, mge)
+            assert not is_monotonic(operator.lt, mge)
+            assert not is_monotonic(operator.gt, mge)
+            assert is_monotonic(operator.ge, mge)
+        
+            mg = [4, 3, 1, -100]
+            assert not is_monotonic(operator.le, mg)
+            assert not is_monotonic(operator.lt, mg)
+            assert is_monotonic(operator.gt, mg)
+            assert is_monotonic(operator.ge, mg)
+        
+            nm = [1, 2, -1, -2]
+            assert not is_monotonic(operator.le, nm)
+            assert not is_monotonic(operator.lt, nm)
+            assert not is_monotonic(operator.gt, nm)
+            assert not is_monotonic(operator.ge, nm)
+        
+            assert is_monotonic(lambda x, y: shouldnt_be_evaluated, [])
+        
+        
+        def immediate_phrase_has_monotonic_ordering(s, n, left_cmp, right_cmp):
+            left = left_dependents_of(s, n)
+            right = right_dependents_of(s, n)
+            return (
+                is_monotonic(left_cmp, (num_words_in_phrase(s, x) for x in left))
+                and is_monotonic(right_cmp, (num_words_in_phrase(s, x) for x in right))
+            )
+        
+        
+        def immediate_phrase_has_outward_ordering(s, n):
+            return immediate_phrase_has_monotonic_ordering(
+                s,
+                n,
+                operator.ge,
+                operator.le
+            )
+        
+        
+        def has_monotonic_ordering(s, left_cmp, right_cmp):
+            return all(
+                immediate_phrase_has_monotonic_ordering(s, n, left_cmp, right_cmp)
+                for n in sorted(s.nodes())
+            )
+        
+        
+        def has_outward_ordering(s):
+            return has_monotonic_ordering(s, operator.ge, operator.le)
+        
+        
+        def has_pseudo_outward_ordering(s):
+            def conditions():
+                for node in sorted(s.nodes()):
+                    left = left_dependents_of(s, node)
+                    if left:
+                        first_weight = num_words_in_phrase(s, left[0])
+                        yield all(
+                            first_weight >= num_words_in_phrase(s, n)
+                            for n in left[1:]
+                        )
+                    right = right_dependents_of(s, node)
+                    if right:
+                        last_weight = num_words_in_phrase(s, right[-1])
+                        yield all(
+                            last_weight >= num_words_in_phrase(s, n)
+                            for n in right[:-1]
+                        )
+            return all(conditions())
+        
+        
+        def test_has_outward_ordering():
+            good_left_edges = [(6, 5), (6, 4), (4, 3), (6, 2), (2, 1), (1, 0)]
+            good_right_edges = [(7, 8), (7, 9), (9, 10), (7, 11), (11, 12), (12, 13)]
+            
+            tree = nx.DiGraph(good_left_edges)
+            assert has_outward_ordering(tree)
+        
+            tree = nx.DiGraph(good_left_edges[:-2])
+            assert not has_outward_ordering(tree)
+            
+            tree = nx.DiGraph(good_right_edges)
+            assert has_outward_ordering(tree)
+        
+            tree = nx.DiGraph(good_right_edges[:-2])
+            assert not has_outward_ordering(tree)
+        
+            tree = nx.DiGraph(good_left_edges + good_right_edges)
+            assert has_outward_ordering(tree)
+        
+        
+        def test_has_monotonic_ordering():
+            good_left_edges = [(6, 5), (6, 4), (4, 3), (6, 2), (2, 1), (1, 0)]
+            good_right_edges = [(7, 8), (7, 9), (9, 10), (7, 11), (11, 12), (12, 13)]    
+            bad_right_edges = [(7, 8), (8, 9), (9, 10), (7, 11), (11, 12), (7, 13)]
+            bad_left_edges = [(6, 5), (5, 4), (4, 3), (6, 2), (2, 1), (6, 0)]
+        
+            tree = nx.DiGraph(good_right_edges)
+            assert not has_monotonic_ordering(tree, operator.le, operator.ge)    
+            
+            tree = nx.DiGraph(bad_right_edges)
+            assert has_monotonic_ordering(tree, operator.le, operator.ge)
+        
+            tree = nx.DiGraph(good_left_edges)
+            assert not has_monotonic_ordering(tree, operator.le, operator.ge)
+        
+            tree = nx.DiGraph(bad_left_edges)
+            assert has_monotonic_ordering(tree, operator.le, operator.ge)
+        
+            tree = nx.DiGraph(bad_left_edges + bad_right_edges)
+            assert has_monotonic_ordering(tree, operator.le, operator.ge)
+            assert not has_monotonic_ordering(tree, operator.ge, operator.le)
+        
+        
+        def insert_multiple(xs, indices, values):
+            indices = set(indices)
+            values_it = iter(values)
+            for i, x in enumerate(xs):
+                if i in indices:
+                    yield next(values_it)
+                    indices.remove(i)
+                yield x
+            for i_left_over in indices:
+                yield next(values_it)
+        
+        
+        def crossings_in(tree):
+            for edge in tree.edges():
+                n1, n2 = sorted(edge)
+                for edge_ in tree.edges():
+                    n1_, n2_ = sorted(edge_)
+                    if not (n2_ <= n1
+                            or n2 <= n1_
+                            or (n1 <= n1_ and n2_ <= n2)
+                            or (n1_ <= n1 and n2 <= n2_)):
+                        yield frozenset({edge, edge_})
+        
+        
+        def num_crossings_in(tree):
+            return len(set(crossings_in(tree)))
+        
+        
+        def edge_projective(graph, arc):
+            """ determine if the given edge is part of a projective graph.
+            projective iff given n1 and n2 there is no edge containing n1' and n2' such
+            that n1 < n1' < n2 < n2' or n1 > n1' > n2 > n2'. """
+            n1, n2 = sorted(arc) # now we know n1 < n2
+            def conditions():
+                for arc in graph.edges():
+                    n1_, n2_ = sorted(arc) # now we know n1_ < n2_
+                    yield (n2_ <= n1
+                           or n2 <= n1_
+                           or (n1 <= n1_ and n2_ <= n2)
+                           or (n1_ <= n1 and n2 <= n2_))
+            return all(conditions())
+        
+        
+        def is_projective(graph):
+            return all(edge_projective(graph, edge) for edge in graph.edges())
+        
+        
+        def gaps_left_right(s, h):
+            phrase = immediate_phrase_of(s, h, with_gaps=True)
+            h_index = phrase.index(h)
+            for i, x in enumerate(phrase):
+                if is_gap(x):
+                    yield s, h, i < h_index, x.code
+        
+        
+        def is_projective_on_left(s):
+            for n in sorted(s.nodes()):
+                gaps = gaps_left_right(s, n)
+                if any(gap_on_left for _, _, gap_on_left, _ in gaps):
+                    return False
+            return True
+        
+        
+        def is_projective_on_right(s):
+            for n in sorted(s.nodes()):
+                gaps = gaps_left_right(s, n)
+                if any(not gap_on_left for _, _, gap_on_left, _ in gaps):
+                    return False
+            return True
+        
+        
+        def transitive_head_of(s, n, k):
+            assert k >= 0
+            while k > 0:
+                n = head_of(s, n)
+                k -= 1
+            return n
+        
+        
+        def transitive_heads(s, n):
+            while True:
+                yield n
+                n = head_of(s, n)
+                if n == 0:
+                    break
+        
+        
+        if __name__ == '__main__':
+            import nose
+            nose.runmodule()
+--------------------
+    construct_output_predictability_matched_RLAs.py:
+        # Using NetworkX package and conllu package
+        import os
+        from io import open
+        from conllu import parse
+        import networkx as nx
+        from operator import itemgetter
+        from Measures import *
+        from Measures_rand import *
+        import random
+        import treegen as gen
+        from baseline_conditions_predictability_RLAs import *
+        
+        directory = "./SUD"                   # directory containing the UD scheme tree files in CONLLU format
+        ud_files = []
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith('train.conllu'):
+                    fullpath = os.path.join(root, file)
+                    ud_files.append(fullpath)            # creates a list of path of all files (file of each language) from the directory
+        
+        for i in ud_files:                                       # reads file of each language one by one
+            lang = str(i).replace("./SUD", "")
+            lang=lang.replace("-sud-train.conllu", "")            # lang variable stores the language code
+            lang=lang.replace("-sud-test.conllu", "")
+            data_file = open(str(i),'r',encoding='utf-8').read()
+            sentences = []
+            sentences = parse(data_file)                         # parses the CONLLU format
+            sent_id=0
+            print(lang)
+            num_sent=0
+            num_edge=0
+            for sentence in sentences[0:]:
+                sent_id+=1
+                print(sent_id)
+                if sent_id>1:
+                    num_sent += 1
+                    tree = nx.DiGraph()                              # An empty directed graph (i.e., edges are uni-directional)
+                    for nodeinfo in sentence[0:]:                    # retrieves information of each node from dependency tree in UD format
+                        entry=list(nodeinfo.items())
+                        if not entry[7][1]=='punct':
+                            tree.add_node(entry[0][1], form=entry[1][1], lemma=entry[2][1], upostag=entry[3][1], xpostag=entry[4][1], feats=entry[5][1], head=entry[6][1], deprel=entry[7][1], deps=entry[8][1], misc=entry[9][1])                #adds node to the directed graph
+                    ROOT=0
+                    tree.add_node(ROOT)                            # adds an abstract root node to the directed graph
+        
+                    for nodex in tree.nodes:
+                        if not nodex==0:
+                            if tree.has_node(tree.nodes[nodex]['head']):                                         # to handle disjoint trees
+                                tree.add_edge(tree.nodes[nodex]['head'],nodex,drel=tree.nodes[nodex]['deprel'])       # adds edges as relation between nodes
+        
+                    n=len(tree.edges)
+                    if n<12 and n>1:
+                        get = Compute_measures(tree)
+                        num_cross_real=0
+                        for edgex in tree.edges:
+                            if not edgex[0]==ROOT:
+                                if get.is_projective(edgex):                   # checks if edge is projective or not
+                                    num_cross_real += 0
+                                else:
+                                    num_cross_real += 1
+        
+                        generate = Random_base(tree)                       # initiates object for computing measures for the real tree
+                        ls_random = generate.gen_random(num_cross_real)    # stores the list of random generated trees
+        
+                        if ls_random:
+                            treex=ls_random[0]
+                            print(ls_random)
+                            print(tree.edges)
+                            print(treex.edges)
+                            root=1000
+                            find=Compute_measures_rand(treex,root)          # initiates object for computing measures for the random tree
+                            max_arity_rand=find.arity()[0]                               # gives maximum arity present in the tree
+                            avg_arity_rand=find.arity()[1]
+                            projection_degree_rand=find.projection_degree(root)          # gives the projection degree of the tree i.e., size of longest projection chain in the tree
+                            gap_degree_rand=find.gap_degree(root)                        # gives gap_degree of the tree
+                            k_illnest_rand=find.illnestedness(root,gap_degree_rand)
+                            sent_len=0
+                            for edgex in treex.edges:
+                                if not edgex[0]==root:
+                                    direction_rand = find.dependency_direction(edgex)    # direction of the edge in terms of relative linear order of head and its dependent
+                                    dep_distance_rand=find.dependency_distance(edgex)    # gives the distance between nodes connected by an edge
+                                    dep_depth_rand=find.dependency_depth(edgex)
+                                    predictability_rand=find.calculate_predictability(edgex)
+                                    #print(dep_distance_rand)
+                                    #print("\n")
+                                    if find.is_projective(edgex):                   # checks if edge is projective or not
+                                        projectivity_rand=1
+                                    else:
+                                        projectivity_rand=0
+                                    edge_degree_rand=find.edge_degree(edgex)             # gives the no. of edges crossing an edge
+                                    endpoint_cross_rand=find.endpoint_crossing(edgex)    # no. of heads which immediately dominates the nodes which causes non-projectivity in an edge span
+                                    HDD_rand=find.hdd(edgex)
+                                    results1 = open('DL_matched_RLAs.csv','a')
+                                    results1.write(str(lang)+"\t"+"random"+"\t"+str(sent_id)+"\t"+str(n)+"\t"+str(max_arity_rand)+"\t"+str(avg_arity_rand)+"\t"+str(projection_degree_rand)+"\t"+str(gap_degree_rand)+"\t"+str(k_illnest_rand)+"\t"+str(edgex)+"\t"+str(direction_rand)+"\t"+str(dep_distance_rand)+"\t"+str(dep_depth_rand)+"\t"+str(predictability_rand)+"\t"+str(projectivity_rand)+"\t"+str(edge_degree_rand)+"\t"+str(endpoint_cross_rand)+"\t"+str(HDD_rand)+"\n")
+                                    results1.close()
+                            #Computes the measures for the real tree
+                            max_arity_real=get.arity()[0]                               # gives maximum arity present in the tree
+                            avg_arity_real=get.arity()[1]
+                            projection_degree_real=get.projection_degree(0)          # gives the projection degree of the tree i.e., size of longest projection chain in the tree
+                            gap_degree_real=get.gap_degree(0)                        # gives gap_degree of the tree
+                            k_illnest_real=get.illnestedness(0,gap_degree_real)
+                            sent_len=0
+                            for edgey in tree.edges:
+                                if not edgey[0]==0:
+                                    direction_real = get.dependency_direction(edgey)    # direction of the edge in terms of relative linear order of head and its dependent
+                                    dep_distance_real=get.dependency_distance(edgey)    # gives the distance between nodes connected by an edge
+                                    dep_depth_real=get.dependency_depth(edgey)
+                                    predictability_real=get.calculate_predictability(edgey)
+                                    #print(dep_distance_real)
+                                    if get.is_projective(edgey):                   # checks if edge is projective or not
+                                        projectivity_real=1
+                                    else:
+                                        projectivity_real=0
+                                    edge_degree_real=get.edge_degree(edgey)             # gives the no. of edges crossing an edge
+                                    endpoint_cross_real=get.endpoint_crossing(edgey)    # no. of heads which immediately dominates the nodes which causes non-projectivity in an edge span
+                                    HDD_real=get.hdd(edgey)
+                                    results2 = open('DL_matched_RLAs.csv','a')
+                                    results2.write(str(lang)+"\t"+"real"+"\t"+str(sent_id)+"\t"+str(n)+"\t"+str(max_arity_real)+"\t"+str(avg_arity_real)+"\t"+str(projection_degree_real)+"\t"+str(gap_degree_real)+"\t"+str(k_illnest_real)+"\t"+str(edgey)+"\t"+str(direction_real)+"\t"+str(dep_distance_real)+"\t"+str(dep_depth_real)+"\t"+ str(predictability_real) +"\t"+str(projectivity_real)+"\t"+str(edge_degree_real)+"\t"+str(endpoint_cross_real)+"\t"+str(HDD_real)+"\n")
+                                    results2.close()
+                            print("\n-----------------\n"+str(tree.edges))
+--------------------
+    Third_baseline.py:
+        import os
+        from io import open
+        import networkx as nx
+        from Measures_rand import *
+        from Measures import *
+        import random
+        import treegen as gen
+        import depgraph as dep
+        
+        class Random_base(object):
+            def __init__(self, tree):
+                self.tree = tree
+                self.ls_rand = []
+        
+            def num_cross_rand(self, randtree, abs_root):
+                comput = Compute_measures_rand(randtree, abs_root)
+                ncross_random = 0
+                for edgex in randtree.edges:
+                    if not edgex[0] == abs_root:
+                        if comput.is_projective(edgex):
+                            ncross_random += 0
+                        else:
+                            ncross_random += 1
+                return ncross_random
+        
+            def is_equal_num_crossings(self, randtree, abs_root, num_cross_real):
+                flag = False
+                num_cross_random = self.num_cross_rand(randtree, abs_root)
+                if num_cross_random == num_cross_real:
+                    flag = True
+                return flag
+        
+            def is_same_tree(self, randtree, abs_root):
+                rand_tree = nx.DiGraph()
+                for edgex in randtree.edges:
+                    if not edgex[0] == abs_root:
+                        rand_tree.add_edge(edgex[0], edgex[1])
+        
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0] == 0:
+                        real_tree.add_edge(edgez[0], edgez[1])
+                mapping_real = dict(zip(real_tree.nodes(), range(1, len(real_tree.nodes()) + 1)))
+                mapping_rand = dict(zip(rand_tree.nodes(), range(1, len(rand_tree.nodes()) + 1)))
+                REC_real = nx.relabel_nodes(real_tree, mapping_real)
+                REC_rand = nx.relabel_nodes(rand_tree, mapping_rand)
+                return REC_real.edges == REC_rand.edges
+        
+            def calculate_predictability(self, tree, edge):
+                head, dependent = edge
+                interveners = 0
+                for node in tree.nodes:
+                    if tree.nodes[node]['head'] == head and node < dependent:
+                        interveners += 1
+                return interveners
+        
+            def is_similar_distribution(self, randtree, abs_root):
+                find = Compute_measures_rand(randtree, abs_root)
+                rand_tree = nx.DiGraph()
+                for edgex in randtree.edges:
+                    if not edgex[0] == abs_root:
+                        rand_tree.add_edge(edgex[0], edgex[1])
+               
+                random_dd_sample = []
+                random_predictability_sample = []
+                for edgey in rand_tree.edges:
+                    random_dd_sample.append(find.dependency_distance(edgey))
+                    random_predictability_sample.append(find.predictability(edgey))
+                random_dd_sample.sort()
+                random_predictability_sample.sort()
+               
+                get = Compute_measures(self.tree)
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0] == 0:
+                        real_tree.add_edge(edgez[0], edgez[1])
+                real_dd_sample = []
+                real_predictability_sample = []
+                for edgev in real_tree.edges:
+                    real_dd_sample.append(get.dependency_distance(edgev))
+                    real_predictability_sample.append(get.predictability(edgev))
+                real_dd_sample.sort()
+                real_predictability_sample.sort()
+        
+                mse_dd = sum((rd - rr)**2 for rd, rr in zip(random_dd_sample, real_dd_sample)) / len(real_dd_sample)
+                mse_predictability = sum((rp - rrp)**2 for rp, rrp in zip(random_predictability_sample, real_predictability_sample)) / len(real_predictability_sample)
+               
+                combined_score = (0.65 * mse_dd) + (0.35 * mse_predictability)
+                return combined_score < 0.5  # Adjust threshold as necessary
+           
+            def rand_tree(self, num_cross_real):
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0] == 0:
+                        real_tree.add_edge(edgez[0], edgez[1])
+                edge_list = list(real_tree.edges())
+                node_list = list(real_tree.nodes())
+                random.shuffle(edge_list)
+                random.shuffle(node_list)
+        
+                treex = nx.DiGraph()
+                treex.add_nodes_from(node_list)
+        
+                for nodex in treex.nodes:
+                    if self.tree.has_node(self.tree.nodes[nodex]['head']):
+                        if not self.tree.nodes[nodex]['head'] == 0:
+                            treex.add_edge(self.tree.nodes[nodex]['head'], nodex)
+               
+                mapping = dict(zip(treex.nodes(), range(1, len(treex.nodes()) + 1)))
+                treey = nx.relabel_nodes(treex, mapping)
+        
+                abstract_root = 1000
+                real_root = next(nx.topological_sort(treey))
+                treey.add_edge(abstract_root, real_root)
+                for edgex in treey.edges:
+                    treey.nodes[edgex[1]]['head'] = edgex[0]
+        
+                if self.is_equal_num_crossings(treey, abstract_root, num_cross_real):
+                    if self.is_similar_distribution(treey, abstract_root):
+                        if not self.is_same_tree(treey, abstract_root):
+                            self.ls_rand.append(treey)
+        
+            def gen_random(self, num_cross_real):
+                n = len(self.tree.edges)
+                rand_out = []
+                if n < 30:
+                    x = 0
+                    while len(self.ls_rand) == 0 and x < 30000:
+                        x += 1
+                        self.rand_tree(num_cross_real)
+                        rand_out = self.ls_rand
+                return rand_out
+--------------------
+    README.md:
+        <code> pip install -r requirements.txt </code>
+        
+        # Predictiability-maximization-Tanishq
+        
+        Test whether *predictiability maximization* and DLM together can explain the distribution of structural preferences in SOV as well as SVO languages.
+        
+        Methods:
+        - Generate random baseline trees that match natural language trees in terms of predictiability and DL distribution
+        - Do we get Hindi-like word orders when both predictability and DL are controlled?
+        - Inspired by methods in Yadav et al Open Mind paper (Intervener complexity)
+        
+        Data:
+        - Surface-syntactic universal dependencies (SUD)
+        
+        
+        Tasks:
+        - Define predictability measures for a dependency: Number of interverners that directly modify the preceding co-depenent. For example, in Mohan-ne kabir-ko kitaab di. The dependency between Mohan and di has two interveners that directly modify "di" (preceding co-dependent).
+        - Define a function for predictability measure in Measures class file:
+        - An algoritghm that generates trees that minimize for DL with degree $d$ and maximize for predictability for degree $p$  
+        - Write random baseline generation code for predctability-matched trees: See DL-matched baseline code for reference
+        - Write random baseline code
+--------------------
+    Measures.py:
+        # Packages used: NetworkX -- for tree representation as directed acyclic graphs
+        
+        import networkx as nx
+        
+        class Compute_measures(object):
+            def __init__(self, tree):
+                self.tree=tree                          # tree encodes the nodes and edges content in dictionary format. It uses directed graph (DiGraph) feature of networkX package. For example, nodes are encoded like this - tree.nodes={1:{form:'this',POS:'PRN'},2:{...}}   
+                self.root=0                             # ROOT is an abstract node in the tree and is encoded as empty and with name=0    
+                
+            def dependency_direction(self, edge):       # Computes the direction of an edge (i.e., dependency) according to relative position of dependent and head  
+                direction=''
+                if edge[0]>edge[1]:                     # edge is a list data type in the format [head,dependent]
+                    direction='RL'
+                else:
+                    direction='LR'
+        
+                return direction                        # return direction as 'LR' (Left-to-Right) or RL ('Right-to-Left')  
+        
+            def dependency_distance(self, edge):        # Computes the dependency length i.e., no. of nodes between head and its dependent 
+                dd=0
+                if edge[0]>edge[1]:                      
+                    for nodex in nx.descendants(self.tree, self.root):        
+                        if edge[1]<nodex<edge[0]:                             # all the nodes that lies linearly between dependent and head   
+                            dd+=1
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            dd+=1
+                return dd                              # returns the dependency distance of the edge
+            
+            def dependency_depth(self, edge):        # Computes the dependency length i.e., no. of nodes between head and its dependent 
+                hd=1
+                if edge[0]>edge[1]:                      
+                    for nodex in nx.descendants(self.tree, self.root):        
+                        if edge[1]<nodex<edge[0]:                             # all the nodes that lies linearly between dependent and head
+                            if nx.descendants(self.tree, nodex):
+                                hd+=1
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            if nx.descendants(self.tree, nodex):
+                                hd+=1
+                return hd                              # returns the dependency distance of the edge
+        
+            def calculate_predictability(self, edge):
+                head, dependent = edge
+                interveners = 0
+                for node in nx.descendants(self.tree, self.root):
+                    if dependent < head:
+                        if tree.nodes[node]['head'] == head and node > dependent and node < head:
+                            interveners += 1
+                    else:
+                        if tree.nodes[node]['head'] == dependent and node > head and node < dependent:
+                            interveners += 1
+                return interveners
+                
+            def is_projective(self, edge):             # Checks if an edge is projective or not and returns a boolean value.
+                projective=True
+                edge_span=[]                 
+                if edge[0]>edge[1]:                                      
+                    for nodex in nx.descendants(self.tree, self.root):   
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                       
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                flag=0
+                for nodeI in edge_span:
+                    if not self.tree.nodes[nodeI]['head'] in edge_span:
+                        if not nodeI in nx.descendants(self.tree, edge[0]):
+                            if not self.tree.nodes[nodeI]['deprel']=='punct':
+                                flag += 1
+                if not flag==0:
+                    projective=False
+                return projective
+            
+            def edge_degree(self, edge):                                 # Computes the number of edges causing non-projectivity              
+                eD=0
+                edge_span=[]                 
+                if edge[0]>edge[1]:                                      
+                    for nodex in nx.descendants(self.tree, self.root):   
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                       
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                for nodeI in edge_span:
+                    if not self.tree.nodes[nodeI]['head'] in edge_span:         # if the head of any intervening node exists outside the span of the edge
+                        if not nodeI in nx.descendants(self.tree, edge[0]):
+                            if not self.tree.nodes[nodeI]['deprel']=='punct':
+                                eD += 1    
+                return eD                                                        
+        
+            def gap_degree(self, node):                     # Computes the gaps in the projection chain containing maximum number of gaps 
+                chains_gapD=[]
+                terminals=[]
+                for nodex in self.tree.nodes:
+                    if self.tree.out_degree(nodex)==0:
+                        terminals.append(nodex)
+        
+                for nodeT in terminals:                       
+                    gapD=0
+                    if nx.has_path(self.tree, node, nodeT):     
+                        pathx=nx.all_simple_paths(self.tree, node, nodeT, cutoff=None)     # Projection chain from ROOT to each Terminal node is encoded as list of nodes in the chain   
+                        for item in pathx:
+                            pathy=item
+                            for nodeP in item:
+                                if not nodeP==self.root:
+                                    if not self.tree.nodes[nodeP]['head']==self.root:
+                                        if not self.is_projective([self.tree.nodes[nodeP]['head'],nodeP]):   # If any edge in a projection chain is non-projective 
+                                            gapD=gapD+1                                                      # No. of non-projective edges in a projection chain = No. of gap degree
+                    chains_gapD.append(gapD)
+        
+                gap_deg=max(chains_gapD)                                                             # Gap degree of a node is the maximum gap degree in its dependents
+                return gap_deg
+        
+            def gapnodes(self, pathx):                                          # Returns all the nodes which causes GAP in the projection of a node
+                nodeM=[]
+                for nodex in pathx:
+                    if not nodex==self.root:
+                        if not self.tree.nodes[nodex]['head']==self.root:
+                            if not self.is_projective([self.tree.nodes[nodex]['head'],nodex]):
+                                cross_dep=nodex
+                                cross_head=self.tree.nodes[cross_dep]['head']   
+                                edge_span=[]                 
+                                if cross_head>cross_dep:                                      
+                                    for nodev in nx.descendants(self.tree, self.root):   
+                                        if cross_dep<nodev<cross_head:
+                                            edge_span.append(nodev)                       
+                                else:
+                                    for nodev in nx.descendants(self.tree, self.root):
+                                        if cross_head<nodev<cross_dep:
+                                            edge_span.append(nodev)
+                                for nodeI in edge_span:
+                                    if not self.tree.nodes[nodeI]['head'] in edge_span:         # if the head of any intervening node exists outside the span of the edge
+                                        if not nodeI in nx.descendants(self.tree, cross_head):
+                                            if not self.tree.nodes[nodeI]['deprel']=='punct':
+                                                nodeM.append(nodeI)
+                return nodeM
+        
+            def illnestedness(self,node,gapD):
+                k_illnest=0
+                if gapD==0:
+                    k_illnest=0
+                else:
+                    illnest = []
+                    all_gapped_chains=[]
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if not nodex==self.root:
+                            if not self.tree.nodes[nodex]['head']==self.root:
+                                if not self.is_projective([self.tree.nodes[nodex]['head'],nodex]):
+                                    if nx.has_path(self.tree, node, nodex):
+                                        pathx=nx.all_simple_paths(self.tree, node, nodex, cutoff=None)
+                                        for item in pathx:
+                                            all_gapped_chains.append(item)                             # It has all the projection chains from root to dependents of crossing arcs
+                                                                                                  # i.e., all possible chains which can interleave with other                  
+                    chains_with_gaps=[]
+                    for chainx in all_gapped_chains:
+                        flag=0
+                        for chainy in all_gapped_chains:
+                            if set(chainx) < set(chainy):
+                                flag=flag+1
+                        if flag==0:
+                            chains_with_gaps.append(chainx)
+                            
+                    for pathz in chains_with_gaps:
+                        #print(pathz)
+                        num_interL=0                                                        # Variable for number of chains that can interleave with a single chain in question
+                        nodeM=self.gapnodes(pathz)
+                        for pathy in chains_with_gaps:
+                            if not pathy==pathz:
+                                flag=0
+                                for nodeC in nodeM:
+                                    if nodeC in pathy:
+                                        flag=flag+1
+                                if not flag==0:
+                                    nodeMM=self.gapnodes(pathy)
+                                    flagg=0
+                                    for nodeCC in nodeMM:
+                                        if nodeCC in pathz:
+                                            flagg=flagg+1
+                                    if not flagg==0:
+                                        num_interL = num_interL + 1
+                        illnest.append(num_interL)
+                    k_illnest = max(illnest)
+                return k_illnest
+        
+            def gapD_hist(self):
+                gapd_histogram={}
+                for nodex in self.tree.nodes:
+                    gapD=self.gap_degree(nodex)
+                    if gapD in gapd_histogram.keys():
+                        gapd_histogram[gapD]=gapd_histogram[gapD]+1
+                    else:
+                        gapd_histogram[gapD]=1
+                return gapd_histogram 
+        
+            def projection_degree(self, node):
+                size_chains=[]
+                terminals=[]
+                for nodex in self.tree.nodes:
+                    if self.tree.out_degree(nodex)==0:
+                        terminals.append(nodex)
+        
+                for nodeT in terminals:
+                    size=0
+                    if nx.has_path(self.tree, node, nodeT):
+                        pathx=nx.all_simple_paths(self.tree, node, nodeT, cutoff=None)              # Projection chain from ROOT to each Terminal node is encoded as list of nodes in the chain
+                        for item in pathx:  
+                            size=len(item)-1
+                    size_chains.append(size)
+                proj_degree=max(size_chains)                                    # Projection degree = No. of nodes in the longest projection chain from ROOT to a terminal node 
+                return proj_degree
+        
+            def projD_hist(self):
+                projd_histogram={}
+                for nodex in self.tree.nodes:
+                    projD=self.projection_degree(nodex)
+                    if projD in projd_histogram.keys():
+                        projd_histogram[projD]=projd_histogram[projD]+1
+                    else:
+                        projd_histogram[projD]=1
+                return projd_histogram 
+        
+            def arity(self):                                                    # Computes arity of the tree using out-degree of nodes 
+                tree_arity=self.tree.out_degree(list(self.tree.nodes))          # returns a dictionary containing nodenames as keys and its out-degree (or arity) as its values
+                max_arity=max([x[1] for x in tree_arity])                       # Maximum out-degree = maximum arity in the tree
+                avg_arity=sum([x[1] for x in tree_arity])/len([x[1] for x in tree_arity])
+                histogram={}
+                for arityx in [x[1] for x in tree_arity]:
+                    if arityx in histogram.keys():
+                        histogram[arityx]=histogram[arityx]+1                   # Creates arity histogram i.e. frequency of each arity
+                    else:
+                        histogram[arityx]=1
+                arity_histogram=histogram                                       
+                return [max_arity, avg_arity, tree_arity, arity_histogram]                    
+        
+            def endpoint_crossing(self,edge):
+                edge_span=[]
+                if edge[0]>edge[1]:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                endpoint={}
+                
+                for nodeI in edge_span:
+                    if not self.tree.nodes[nodeI]['head'] in edge_span:       # nodes intervening the edge span which are not dominated by the any node in the edge span
+                        if not nodeI in nx.descendants(self.tree, edge[0]):
+                            if not self.tree.nodes[nodeI]['deprel']=='punct':
+                                endpoint[self.tree.nodes[nodeI]['head']]=1        # creates a dictionary of all nodes having their outside their span. This dictionary has keys as 'heads' of the intervening nodes
+                                    
+                endpoint_cross=len(endpoint)                                   # If the intervening nodes belongs to more than head outside the edge span, then 1-endpoint crossing constraint is voilated
+                return endpoint_cross                                          # returns the no. of heads outside the edge span which dominates the intervening nodes   
+        
+            def compute_all(self):
+                Arity=self.arity()
+                Projection_degree=self.projection_degree()
+                Gap_degree=self.gap_degree()
+                direction={}
+                dep_distane={}
+                projectivity={}
+                Edge_degree={}
+                endpoint_cross={}
+                for edgex in self.tree.edges:
+                    direction[edgex]=self.dependency_direction(edgex)
+                    dep_distance[edgex]=self.dependency_distance(edgex)
+                    projectivity[edgex]=self.is_projective(edgex)
+                    Edge_degree[edgex]=self.edge_degree(edgex)
+                    endpoint_cross[edgex]=self.endpoint_crossing(edgex)
+        
+                return [Arity, Projection_degree, Gap_degree, direction, dep_distance, projectivity, Edge_degree, endpoint_cross]
+        
+            def all_dependent_constraint(self,edge):
+                all_dep_deg=0
+                edge_span=[]
+                if edge[0]>edge[1]:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                          
+                            
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                if not self.is_projective(edge):
+                    for nodey in edge_span:
+                        if not (edge[0] in nx.ancestors(self.tree, nodey)):                                                                 # if a node 'x' occurring the edge span is not dominated by the head of the edge
+                            if not self.tree.nodes[nodey]['deprel']=='punct':
+                                int_node=nodey
+                                if not int_node==0:
+                                    for edgex in self.tree.edges:
+                                        if edgex[1]==int_node:
+                                            int_head=edgex[0]
+                                    dep_int=0
+                                    for nodeI in edge_span:
+                                        if self.tree.nodes[nodeI]['head']==int_head:
+                                            dep_int=dep_int+1
+                                        else:
+                                            dep_int=dep_int
+                                    all_dep=0
+                                    for nodeJ in nx.descendants(self.tree, self.root):
+                                        if self.tree.nodes[nodeJ]['head']==int_head:
+                                            all_dep=all_dep+1
+                                        else:
+                                            all_dep=all_dep
+                                    all_dep_deg=all_dep-dep_int
+                                else:
+                                    all_dep_deg=0            
+                else:
+                    all_dep_deg=100
+        
+                return all_dep_deg
+        
+                    
+            def hdd(self,edge):
+                HDD=0
+                edge_span=[]
+                if edge[0]>edge[1]:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                          
+                            
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                if not self.is_projective(edge):
+                    for nodeI in edge_span:
+                        if not self.tree.nodes[nodeI]['head'] in edge_span:       # nodes intervening the edge span which are not dominated by the any node in the edge span
+                            if not nodeI in nx.descendants(self.tree, edge[0]):
+                                if not self.tree.nodes[nodeI]['deprel']=='punct':
+                                    int_node=nodeI
+                                    if not int_node==0:
+                                        for edgex in self.tree.edges:
+                                            if edgex[1]==int_node:
+                                                int_head=edgex[0]
+                                        if nx.has_path(self.tree, int_head, edge[0]):
+                                            pathx=nx.all_simple_paths(self.tree, int_head, edge[0], cutoff=None)
+                                            for item in pathx:
+                                                HDD=len(item)-1
+                                        elif nx.has_path(self.tree, edge[0], int_head):
+                                            pathx=nx.all_simple_paths(self.tree, edge[0], int_head, cutoff=None)
+                                            for item in pathx:
+                                                HDD=len(item)-1
+                                        else:
+                                            HDD=1
+                                    else:
+                                        HDD=2
+                                            
+                return HDD
+--------------------
+    project_explorer.py:
+        import os
+        import fnmatch
+        
+        # Maximum number of characters from each file to display
+        MAX_CHARACTERS = 500000000
+        
+        def display_project_structure_with_content(startpath='.'):
+            # Directories to exclude from traversal
+            excluded_dirs = ['.git', '__pycache__']
+        
+            # File patterns considered text files
+            text_file_patterns = ['*.py', '*.json', '*.yaml', '*.yml', '*.md','*.ipynb']
+        
+            for root, dirs, files in os.walk(startpath):
+                # Exclude certain directories
+                dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        
+                # Determine the indentation based on directory depth
+                level = root.replace(startpath, '').count(os.sep)
+                indent = ' ' * 4 * level
+                # Print directory name
+                print('{}{}/'.format(indent, os.path.basename(root)))
+        
+                subindent = ' ' * 4 * (level + 1)
+                for filename in files:
+                    # Check if the file matches any of our text patterns
+                    if any(fnmatch.fnmatch(filename, pattern) for pattern in text_file_patterns):
+                        filepath = os.path.join(root, filename)
+                        print(f"{subindent}{filename}:")
+                        try:
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                # not Limiting the content length
+                                shortened_content = content
+                                # Remove leading/trailing whitespace and print line by line
+                                stripped_content = shortened_content.strip()
+                                content_lines = stripped_content.split('\n')
+                                for line in content_lines:
+                                    print(f"{subindent*2}{line}")
+                        except UnicodeDecodeError:
+                            print(f"{subindent*2}[Binary or undecodable file]")
+                        except Exception as e:
+                            print(f"{subindent*2}[Error reading file: {e}]")
+                        print("-" * 20)  # Separator between files
+        
+        if __name__ == "__main__":
+            display_project_structure_with_content()
+--------------------
+    Compute-measures.py:
+        # Using NetworkX package and conllu package
+        import os
+        from io import open
+        from conllu import parse
+        import networkx as nx
+        from operator import itemgetter
+        from Measures import *
+        import random
+        import treegen as gen
+        
+        directory = "./SUD"                   # directory containing the UD scheme tree files in CONLLU format
+        ud_files = []
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith('train.conllu'):
+                    fullpath = os.path.join(root, file)
+                    ud_files.append(fullpath)            # creates a list of path of all files (file of each language) from the directory
+        
+        for i in ud_files:                                       # reads file of each language one by one
+            lang = str(i).replace("./SUD", "")
+            lang=lang.replace("-sud-train.conllu", "")            # lang variable stores the language code
+            lang=lang.replace("-sud-test.conllu", "")
+            data_file = open(str(i),'r',encoding='utf-8').read()
+            sentences = []
+            sentences = parse(data_file)                         # parses the CONLLU format
+            sent_id=0
+            print(lang)
+            num_sent=0
+            num_edge=0
+            for sentence in sentences[0:]:
+                sent_id+=1
+                print(sent_id)
+                if sent_id>1:
+                    num_sent += 1
+                    tree = nx.DiGraph()                              # An empty directed graph (i.e., edges are uni-directional)
+                    for nodeinfo in sentence[0:]:                    # retrieves information of each node from dependency tree in UD format
+                        entry=list(nodeinfo.items())
+                        if not entry[7][1]=='punct':
+                            tree.add_node(entry[0][1], form=entry[1][1], lemma=entry[2][1], upostag=entry[3][1], xpostag=entry[4][1], feats=entry[5][1], head=entry[6][1], deprel=entry[7][1], deps=entry[8][1], misc=entry[9][1])                #adds node to the directed graph
+                    ROOT=0
+                    tree.add_node(ROOT)                            # adds an abstract root node to the directed graph
+        
+                    for nodex in tree.nodes:
+                        if not nodex==0:
+                            if tree.has_node(tree.nodes[nodex]['head']):                                         # to handle disjoint trees
+                                tree.add_edge(tree.nodes[nodex]['head'],nodex,drel=tree.nodes[nodex]['deprel'])       # adds edges as relation between nodes
+        
+                    n=len(tree.edges)
+                    if n<12 and n>1:
+                        get = Compute_measures(tree)
+                        #Computes the measures for the real tree
+                        projection_degree_real=get.projection_degree(0)          # gives the projection degree of the tree i.e., size of longest projection chain in the tree
+                        sent_len=0
+                        for edgey in tree.edges:
+                            if not edgey[0]==0:
+                                direction_real = get.dependency_direction(edgey)    # direction of the edge in terms of relative linear order of head and its dependent
+                                dep_distance_real=get.dependency_distance(edgey)    # gives the distance between nodes connected by an edge
+                                dep_depth_real=get.dependency_depth(edgey)
+                                #print(dep_distance_real)
+                                results2 = open('English-measures.csv','a')
+                                results2.write(str(lang)+"\t"+"real"+"\t"+str(sent_id)+"\t"+str(n)+"\t"+str(projection_degree_real)+"\t"+str(edgey)+"\t"+str(direction_real)+"\t"+str(dep_distance_real)+"\t"+str(dep_depth_real)+"\n")
+                                results2.close()
+                            print("\n-----------------\n"+str(tree.edges))
+--------------------
+    baseline_conditions_DL_matched_RLAs.py:
+        # Using NetworkX package and conllu package
+        # This is baseline conditions module; more conditions can be added as functions
+        import os
+        from io import open
+        import networkx as nx
+        from operator import itemgetter
+        import random
+        from Measures_rand import *
+        from Measures import *
+        import treegen as gen
+        import depgraph as dep
+        
+        class Random_base(object):
+            def __init__(self, tree):                   # tree has an abstract node=0 and real nodes =1,2,... 
+                self.tree=tree                          # tree encodes the nodes and edges content in dictionary format. It uses directed graph (DiGraph) feature of networkX package. For example, nodes are encoded like this - tree.nodes={1:{form:'this',POS:'PRN'},2:{...}}   
+                self.ls_rand=[]
+        
+        ##    def crossings_in(self,tree):
+        ##        for edge in tree.edges():
+        ##            n1, n2 = sorted(edge)
+        ##            for edge_ in tree.edges():
+        ##                n1_, n2_ = sorted(edge_)
+        ##                if not (n2_ <= n1 or n2 <= n1_ or (n1 <= n1_ and n2_ <= n2) or (n1_ <= n1 and n2 <= n2_)):
+        ##                    yield frozenset({edge, edge_})
+        
+            def num_cross_rand(self,randtree,abs_root):               # requires random tree and its abstract root=10000
+                comput=Compute_measures_rand(randtree,abs_root)
+                ncross_random=0
+                for edgex in randtree.edges:
+                    if not edgex[0]==abs_root: 
+                        if comput.is_projective(edgex):                   # checks if edge is projective or not
+                            ncross_random += 0
+                        else:
+                            ncross_random += 1
+                return ncross_random                                  # returns number of crossings in the random tree 
+        
+            def is_equal_num_crossings(self,randtree,abs_root,num_cross_real):   # requires random tree, its abstract root and numCrossings in real tree  
+                flag=False
+                num_cross_random=self.num_cross_rand(randtree,abs_root)       
+                if num_cross_random==num_cross_real:                      # checks if number of crossings are equal in real and random tree
+                    flag=True
+                return flag
+        
+            def is_same_tree(self,randtree,abs_root):
+                rand_tree=nx.DiGraph()
+                for edgex in randtree.edges:
+                    if not edgex[0]==abs_root:
+                        rand_tree.add_edge(edgex[0],edgex[1])   # regenrates a dummy random tree by removing its abstract root
+        
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0]==0:
+                        real_tree.add_edge(edgez[0],edgez[1])   # regenrates a dummy real tree by removing its abstract root
+                mapping_real=dict(zip(real_tree.nodes(),range(1,len(real_tree.nodes)+1)))
+                mapping_rand=dict(zip(rand_tree.nodes(),range(1,len(rand_tree.nodes)+1)))
+                REC_real=nx.relabel_nodes(real_tree,mapping_real)
+                REC_rand=nx.relabel_nodes(rand_tree,mapping_rand)
+                return REC_real.edges==REC_rand.edges
+        
+        
+            def is_similar_DD_distribution(self,randtree,abs_root):
+                find=Compute_measures_rand(randtree,abs_root)
+                rand_tree=nx.DiGraph()
+                for edgex in randtree.edges:
+                    if not edgex[0]==abs_root:
+                        rand_tree.add_edge(edgex[0],edgex[1])   # regenrates a dummy random tree by removing its abstract root
+                
+                random_dd_sample=[]
+                for edgey in rand_tree.edges:
+                    random_dd_sample.append(find.dependency_distance(edgey))
+                random_dd_sample.sort()
+                
+                get=Compute_measures(self.tree)
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0]==0:
+                        real_tree.add_edge(edgez[0],edgez[1])   # regenrates a dummy real tree by removing its abstract root
+                real_dd_sample=[]
+                for edgev in real_tree.edges:
+                    real_dd_sample.append(get.dependency_distance(edgev))
+                real_dd_sample.sort()
+                return random_dd_sample==real_dd_sample
+            
+            def rand_tree(self,num_cross_real):                 # requires number of crossings from the real tree
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0]==0:
+                        real_tree.add_edge(edgez[0],edgez[1])   # regenrates a dummy real tree by removing its abstract root
+                edge_list=list(real_tree.edges())
+                node_list=list(real_tree.nodes())               
+                random.shuffle(edge_list)
+                random.shuffle(node_list)                      # shuffles the ordering of edges of the dummy real tree 
+        
+                treex=nx.DiGraph()                              # generates an empty random tree 
+                treex.add_nodes_from(node_list)
+        
+                for nodex in treex.nodes:
+                    if self.tree.has_node(self.tree.nodes[nodex]['head']):                                        # to handle disjoint trees
+                        if not self.tree.nodes[nodex]['head']==0:
+                            treex.add_edge(self.tree.nodes[nodex]['head'],nodex)       # adds edges as relation between nodes
+                
+                mapping=dict(zip(treex.nodes(),range(1,len(treex.nodes)+1)))
+                treey=nx.relabel_nodes(treex,mapping) 
+        
+                abstract_root=1000
+                real_root=next(nx.topological_sort(treey))
+                treey.add_edge(abstract_root,real_root)         # adds an abstract root to the random tree 
+                for edgex in treey.edges:
+                    treey.nodes[edgex[1]]['head']=edgex[0]
+        
+                if self.is_equal_num_crossings(treey,abstract_root,num_cross_real):  # matches the no. of crossings in the real and random tree
+                    if self.is_similar_DD_distribution(treey,abstract_root):
+                        if not self.is_same_tree(treey,abstract_root):
+                            self.ls_rand.append(treey)                  # adds the random tree to the list
+        
+            def gen_random(self,num_cross_real):              # requires numbr of crossings from the real tree
+                n = len(self.tree.edges)
+                rand_out=[]
+                if n<30:
+                    x=0
+                    while len(self.ls_rand)==0 and x<30000:     # checks if list of random trees is ampty and limits the generating attempts 
+                        x=x+1
+                        self.rand_tree(num_cross_real)
+                        rand_out=self.ls_rand
+                return rand_out                           # returns the list of random trees
+--------------------
+    baseline_conditions_predictability_RLAs.py:
+        # Using NetworkX package and conllu package
+        # This is baseline conditions module; more conditions can be added as functions
+        import os
+        from io import open
+        import networkx as nx
+        from operator import itemgetter
+        import random
+        from Measures_rand import *
+        from Measures import *
+        import treegen as gen
+        import depgraph as dep
+        
+        class Random_base(object):
+            def __init__(self, tree):  # tree has an abstract node=0 and real nodes =1,2,...
+                self.tree = tree  # tree encodes the nodes and edges content in dictionary format. It uses directed graph (DiGraph) feature of networkX package. For example, nodes are encoded like this - tree.nodes={1:{form:'this',POS:'PRN'},2:{...}}   
+                self.ls_rand = []
+        
+            def num_cross_rand(self, randtree, abs_root):  # requires random tree and its abstract root=10000
+                comput = Compute_measures_rand(randtree, abs_root)
+                ncross_random = 0
+                for edgex in randtree.edges:
+                    if not edgex[0] == abs_root:
+                        if comput.is_projective(edgex):  # checks if edge is projective or not
+                            ncross_random += 0
+                        else:
+                            ncross_random += 1
+                return ncross_random  # returns number of crossings in the random tree 
+        
+            def is_equal_num_crossings(self, randtree, abs_root, num_cross_real):  # requires random tree, its abstract root and numCrossings in real tree  
+                flag = False
+                num_cross_random = self.num_cross_rand(randtree, abs_root)
+                if num_cross_random == num_cross_real:  # checks if number of crossings are equal in real and random tree
+                    flag = True
+                return flag
+        
+            def is_same_tree(self, randtree, abs_root):
+                rand_tree = nx.DiGraph()
+                for edgex in randtree.edges:
+                    if not edgex[0] == abs_root:
+                        rand_tree.add_edge(edgex[0], edgex[1])  # regenerates a dummy random tree by removing its abstract root
+        
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0] == 0:
+                        real_tree.add_edge(edgez[0], edgez[1])  # regenerates a dummy real tree by removing its abstract root
+                mapping_real = dict(zip(real_tree.nodes(), range(1, len(real_tree.nodes()) + 1)))
+                mapping_rand = dict(zip(rand_tree.nodes(), range(1, len(rand_tree.nodes()) + 1)))
+                REC_real = nx.relabel_nodes(real_tree, mapping_real)
+                REC_rand = nx.relabel_nodes(rand_tree, mapping_rand)
+                return REC_real.edges == REC_rand.edges
+        
+            def is_similar_predictability_distribution(self, randtree, abs_root):
+                find = Compute_measures_rand(randtree, abs_root)
+                rand_tree = nx.DiGraph()
+                for edgex in randtree.edges:
+                    if not edgex[0] == abs_root:
+                        rand_tree.add_edge(edgex[0], edgex[1])  # regenerates a dummy random tree by removing its abstract root
+        
+                random_predictability_sample = []
+                for edgey in rand_tree.edges:
+                    random_predictability_sample.append(find.calculate_predictability(edgey))
+                random_predictability_sample.sort()
+        
+                get = Compute_measures(self.tree)
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0] == 0:
+                        real_tree.add_edge(edgez[0], edgez[1])  # regenerates a dummy real tree by removing its abstract root
+                real_predictability_sample = []
+                for edgev in real_tree.edges:
+                    real_predictability_sample.append(get.calculate_predictability(edgev))
+                real_predictability_sample.sort()
+                return random_predictability_sample == real_predictability_sample
+        
+            def rand_tree(self, num_cross_real):  # requires number of crossings from the real tree
+                real_tree = nx.DiGraph()
+                for edgez in self.tree.edges:
+                    if not edgez[0] == 0:
+                        real_tree.add_edge(edgez[0], edgez[1])  # regenerates a dummy real tree by removing its abstract root
+                edge_list = list(real_tree.edges())
+                node_list = list(real_tree.nodes())
+                random.shuffle(edge_list)
+                random.shuffle(node_list)  # shuffles the ordering of edges of the dummy real tree 
+        
+                treex = nx.DiGraph()  # generates an empty random tree 
+                treex.add_nodes_from(node_list)
+        
+                for nodex in treex.nodes:
+                    if self.tree.has_node(self.tree.nodes[nodex]['head']):  # to handle disjoint trees
+                        if not self.tree.nodes[nodex]['head'] == 0:
+                            treex.add_edge(self.tree.nodes[nodex]['head'], nodex)  # adds edges as relation between nodes
+        
+                mapping = dict(zip(treex.nodes(), range(1, len(treex.nodes()) + 1)))
+                treey = nx.relabel_nodes(treex, mapping)
+        
+                abstract_root = 1000
+                real_root = next(nx.topological_sort(treey))
+                treey.add_edge(abstract_root, real_root)  # adds an abstract root to the random tree 
+                for edgex in treey.edges:
+                    treey.nodes[edgex[1]]['head'] = edgex[0]
+        
+                if self.is_equal_num_crossings(treey, abstract_root, num_cross_real):  # matches the no. of crossings in the real and random tree
+                    if self.is_similar_predictability_distribution(treey, abstract_root):  # check predictability distribution
+                        if not self.is_same_tree(treey, abstract_root):
+                            self.ls_rand.append(treey)  # adds the random tree to the list
+        
+            def gen_random(self, num_cross_real):  # requires numbr of crossings from the real tree
+                n = len(self.tree.edges)
+                rand_out = []
+                if n < 30:
+                    x = 0
+                    while len(self.ls_rand) == 0 and x < 30000:  # checks if list of random trees is empty and limits the generating attempts 
+                        x = x + 1
+                        self.rand_tree(num_cross_real)
+                        rand_out = self.ls_rand
+                return rand_out  # returns the list of random trees
+        
+        # Ensure you have the SUD treebank data properly downloaded and organized in the specified directory
+--------------------
+    Measures_rand.py:
+        # Packages used: NetworkX -- for tree representation as directed acyclic graphs
+        
+        import networkx as nx
+        
+        class Compute_measures_rand(object):
+            def __init__(self, tree, root):
+                self.tree=tree                          # tree encodes the nodes and edges content in dictionary format. It uses directed graph (DiGraph) feature of networkX package. For example, nodes are encoded like this - tree.nodes={1:{form:'this',POS:'PRN'},2:{...}}   
+                self.root=root                             # ROOT is an abstract node in the tree and is encoded as empty and with name=0    
+                
+            def dependency_direction(self, edge):       # Computes the direction of an edge (i.e., dependency) according to relative position of dependent and head  
+                direction=''
+                if edge[0]>edge[1]:                     # edge is a list data type in the format [head,dependent]
+                    direction='RL'
+                else:
+                    direction='LR'
+        
+                return direction                        # return direction as 'LR' (Left-to-Right) or RL ('Right-to-Left')  
+                    
+            def dependency_distance(self, edge):        # Computes the dependency length i.e., no. of nodes between head and its dependent 
+                dd=0
+                if edge[0]>edge[1]:                      
+                    for nodex in nx.descendants(self.tree, self.root):        
+                        if edge[1]<nodex<edge[0]:                             # all the nodes that lies linearly between dependent and head   
+                            dd+=1
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            dd+=1
+                return dd                              # returns the dependency distance of the edge
+                
+            def dependency_depth(self, edge):        # Computes the dependency length i.e., no. of nodes between head and its dependent 
+                hd=1
+                if edge[0]>edge[1]:                      
+                    for nodex in nx.descendants(self.tree, self.root):        
+                        if edge[1]<nodex<edge[0]:                             # all the nodes that lies linearly between dependent and head
+                            if nx.descendants(self.tree, nodex):
+                                hd+=1
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            if nx.descendants(self.tree, nodex):
+                                hd+=1
+                return hd                              # returns the dependency distance of the edge
+        
+            def calculate_predictability(self, edge):
+                head, dependent = edge
+                interveners = 0
+                for node in nx.descendants(self.tree, self.root):
+                    if dependent < head:
+                        if tree.nodes[node]['head'] == head and node > dependent and node < head:
+                            interveners += 1
+                    else:
+                        if tree.nodes[node]['head'] == dependent and node > head and node < dependent:
+                            interveners += 1
+                return interveners
+            
+            def is_projective(self, edge):             # Checks if an edge is projective or not and returns a boolean value.
+                projective=True
+                edge_span=[]                 
+                if edge[0]>edge[1]:                                      
+                    for nodex in nx.descendants(self.tree, self.root):   
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                       
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                flag=0
+                for nodeI in edge_span:
+                    if not self.tree.nodes[nodeI]['head'] in edge_span:
+                        if not nodeI in nx.descendants(self.tree, edge[0]):
+                            flag += 1
+                if not flag==0:
+                    projective=False
+                return projective                                                       # Returns TRUE is edge is projective otherwise FALSE
+        
+            def edge_degree(self, edge):                                 # Computes the number of edges causing non-projectivity              
+                eD=0
+                edge_span=[]                 
+                if edge[0]>edge[1]:                                      
+                    for nodex in nx.descendants(self.tree, self.root):   
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                       
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                for nodeI in edge_span:
+                    if not self.tree.nodes[nodeI]['head'] in edge_span:         # if the head of any intervening node exists outside the span of the edge
+                        if not nodeI in nx.descendants(self.tree, edge[0]):
+                            eD += 1    
+                return eD                                                        
+        
+            def gap_degree(self, node):                     # Computes the gaps in the projection chain containing maximum number of gaps 
+                chains_gapD=[]
+                terminals=[]
+                for nodex in self.tree.nodes:
+                    if self.tree.out_degree(nodex)==0:
+                        terminals.append(nodex)
+        
+                for nodeT in terminals:                       
+                    gapD=0
+                    if nx.has_path(self.tree, node, nodeT):     
+                        pathx=nx.all_simple_paths(self.tree, node, nodeT, cutoff=None)     # Projection chain from ROOT to each Terminal node is encoded as list of nodes in the chain   
+                        for item in pathx:
+                            pathy=item
+                            for nodeP in item:
+                                if not nodeP==self.root:
+                                    if not self.tree.nodes[nodeP]['head']==self.root:
+                                        if not self.is_projective([self.tree.nodes[nodeP]['head'],nodeP]):   # If any edge in a projection chain is non-projective 
+                                            gapD=gapD+1                                                      # No. of non-projective edges in a projection chain = No. of gap degree
+                    chains_gapD.append(gapD)
+        
+                gap_deg=max(chains_gapD)                                                             # Gap degree of a node is the maximum gap degree in its dependents
+                return gap_deg
+        
+            def gapnodes(self, pathx):                                          # Returns all the nodes which causes GAP in the projection of a node
+                nodeM=[]
+                for nodex in pathx:
+                    if not nodex==self.root:
+                        if not self.tree.nodes[nodex]['head']==self.root:
+                            if not self.is_projective([self.tree.nodes[nodex]['head'],nodex]):
+                                cross_dep=nodex
+                                cross_head=self.tree.nodes[cross_dep]['head']   
+                                edge_span=[]                 
+                                if cross_head>cross_dep:                                      
+                                    for nodev in nx.descendants(self.tree, self.root):   
+                                        if cross_dep<nodev<cross_head:
+                                            edge_span.append(nodev)                       
+                                else:
+                                    for nodev in nx.descendants(self.tree, self.root):
+                                        if cross_head<nodev<cross_dep:
+                                            edge_span.append(nodev)
+                                for nodeI in edge_span:
+                                    if not self.tree.nodes[nodeI]['head'] in edge_span:         # if the head of any intervening node exists outside the span of the edge
+                                        if not nodeI in nx.descendants(self.tree, cross_head):
+                                            nodeM.append(nodeI)
+                return nodeM
+        
+            def illnestedness(self,node,gapD):
+                k_illnest=0
+                if gapD==0:
+                    k_illnest=0
+                else:
+                    illnest = []
+                    all_gapped_chains=[]
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if not nodex==self.root:
+                            if not self.tree.nodes[nodex]['head']==self.root:
+                                if not self.is_projective([self.tree.nodes[nodex]['head'],nodex]):
+                                    if nx.has_path(self.tree, node, nodex):
+                                        pathx=nx.all_simple_paths(self.tree, node, nodex, cutoff=None)
+                                        for item in pathx:
+                                            all_gapped_chains.append(item)                             # It has all the projection chains from root to dependents of crossing arcs
+                                                                                                  # i.e., all possible chains which can interleave with other                  
+                    chains_with_gaps=[]
+                    for chainx in all_gapped_chains:
+                        flag=0
+                        for chainy in all_gapped_chains:
+                            if set(chainx) < set(chainy):
+                                flag=flag+1
+                        if flag==0:
+                            chains_with_gaps.append(chainx)
+                            
+                    for pathz in chains_with_gaps:
+                        #print(pathz)
+                        num_interL=0                                                        # Variable for number of chains that can interleave with a single chain in question
+                        nodeM=self.gapnodes(pathz)
+                        for pathy in chains_with_gaps:
+                            if not pathy==pathz:
+                                flag=0
+                                for nodeC in nodeM:
+                                    if nodeC in pathy:
+                                        flag=flag+1
+                                if not flag==0:
+                                    nodeMM=self.gapnodes(pathy)
+                                    flagg=0
+                                    for nodeCC in nodeMM:
+                                        if nodeCC in pathz:
+                                            flagg=flagg+1
+                                    if not flagg==0:
+                                        num_interL = num_interL + 1
+                        illnest.append(num_interL)
+                    k_illnest = max(illnest)
+                return k_illnest
+        
+            def gapD_hist(self):
+                gapd_histogram={}
+                for nodex in self.tree.nodes:
+                    gapD=self.gap_degree(nodex)
+                    if gapD in gapd_histogram.keys():
+                        gapd_histogram[gapD]=gapd_histogram[gapD]+1
+                    else:
+                        gapd_histogram[gapD]=1
+                return gapd_histogram 
+        
+            def projection_degree(self, node):
+                size_chains=[]
+                terminals=[]
+                for nodex in self.tree.nodes:
+                    if self.tree.out_degree(nodex)==0:
+                        terminals.append(nodex)
+        
+                for nodeT in terminals:
+                    size=0
+                    if nx.has_path(self.tree, node, nodeT):
+                        pathx=nx.all_simple_paths(self.tree, node, nodeT, cutoff=None)              # Projection chain from ROOT to each Terminal node is encoded as list of nodes in the chain
+                        for item in pathx:  
+                            size=len(item)-1
+                    size_chains.append(size)
+                proj_degree=max(size_chains)                                    # Projection degree = No. of nodes in the longest projection chain from ROOT to a terminal node 
+                return proj_degree
+        
+            def projD_hist(self):
+                projd_histogram={}
+                for nodex in self.tree.nodes:
+                    projD=self.projection_degree(nodex)
+                    if projD in projd_histogram.keys():
+                        projd_histogram[projD]=projd_histogram[projD]+1
+                    else:
+                        projd_histogram[projD]=1
+                return projd_histogram 
+        
+            def arity(self):                                                    # Computes arity of the tree using out-degree of nodes 
+                tree_arity=self.tree.out_degree(list(self.tree.nodes))          # returns a dictionary containing nodenames as keys and its out-degree (or arity) as its values
+                max_arity=max([x[1] for x in tree_arity])                       # Maximum out-degree = maximum arity in the tree
+                avg_arity=sum([x[1] for x in tree_arity])/len([x[1] for x in tree_arity])
+                histogram={}
+                for arityx in [x[1] for x in tree_arity]:
+                    if arityx in histogram.keys():
+                        histogram[arityx]=histogram[arityx]+1                   # Creates arity histogram i.e. frequency of each arity
+                    else:
+                        histogram[arityx]=1
+                arity_histogram=histogram                                       
+                return [max_arity, avg_arity, tree_arity, arity_histogram]                    
+        
+            def endpoint_crossing(self,edge):
+                edge_span=[]
+                if edge[0]>edge[1]:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                endpoint={}
+                
+                for nodeI in edge_span:
+                    if not self.tree.nodes[nodeI]['head'] in edge_span:       # nodes intervening the edge span which are not dominated by the any node in the edge span
+                        if not nodeI in nx.descendants(self.tree, edge[0]):
+                            endpoint[self.tree.nodes[nodeI]['head']]=1        # creates a dictionary of all nodes having their outside their span. This dictionary has keys as 'heads' of the intervening nodes
+                                    
+                endpoint_cross=len(endpoint)                                   # If the intervening nodes belongs to more than head outside the edge span, then 1-endpoint crossing constraint is voilated
+                return endpoint_cross                                          # returns the no. of heads outside the edge span which dominates the intervening nodes   
+        
+            def compute_all(self):
+                Arity=self.arity()
+                Projection_degree=self.projection_degree()
+                Gap_degree=self.gap_degree()
+                direction={}
+                dep_distane={}
+                projectivity={}
+                Edge_degree={}
+                endpoint_cross={}
+                for edgex in self.tree.edges:
+                    direction[edgex]=self.dependency_direction(edgex)
+                    dep_distance[edgex]=self.dependency_distance(edgex)
+                    projectivity[edgex]=self.is_projective(edgex)
+                    Edge_degree[edgex]=self.edge_degree(edgex)
+                    endpoint_cross[edgex]=self.endpoint_crossing(edgex)
+        
+                return [Arity, Projection_degree, Gap_degree, direction, dep_distance, projectivity, Edge_degree, endpoint_cross]
+        
+            def all_dependent_constraint(self,edge):
+                all_dep_deg=0
+                edge_span=[]
+                if edge[0]>edge[1]:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                          
+                            
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                if not self.is_projective(edge):
+                    for nodey in edge_span:
+                        if not (edge[0] in nx.ancestors(self.tree, nodey)):                                                                 # if a node 'x' occurring the edge span is not dominated by the head of the edge
+                            int_node=nodey
+                            if not int_node==1000:
+                                for edgex in self.tree.edges:
+                                    if edgex[1]==int_node:
+                                        int_head=edgex[0]
+                                dep_int=0
+                                for nodeI in edge_span:
+                                    if self.tree.nodes[nodeI]['head']==int_head:
+                                        dep_int=dep_int+1
+                                    else:
+                                        dep_int=dep_int
+                                all_dep=0
+                                for nodeJ in nx.descendants(self.tree, self.root):
+                                    if self.tree.nodes[nodeJ]['head']==int_head:
+                                        all_dep=all_dep+1
+                                    else:
+                                        all_dep=all_dep
+                                all_dep_deg=all_dep-dep_int
+                            else:
+                                all_dep_deg=0            
+                else:
+                    all_dep_deg=100
+        
+                return all_dep_deg
+                    
+            def hdd(self,edge):
+                HDD=0
+                edge_span=[]
+                if edge[0]>edge[1]:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[1]<nodex<edge[0]:
+                            edge_span.append(nodex)                          
+                            
+                else:
+                    for nodex in nx.descendants(self.tree, self.root):
+                        if edge[0]<nodex<edge[1]:
+                            edge_span.append(nodex)
+        
+                if not self.is_projective(edge):
+                    for nodeI in edge_span:
+                        if not self.tree.nodes[nodeI]['head'] in edge_span:       # nodes intervening the edge span which are not dominated by the any node in the edge span
+                            if not nodeI in nx.descendants(self.tree, edge[0]):
+                                int_node=nodeI
+                                if not int_node==self.root:
+                                    for edgex in self.tree.edges:
+                                        if edgex[1]==int_node:
+                                            int_head=edgex[0]
+                                    if nx.has_path(self.tree, int_head, edge[0]):
+                                        pathx=nx.all_simple_paths(self.tree, int_head, edge[0], cutoff=None)
+                                        for item in pathx:
+                                            HDD=len(item)-1
+                                    elif nx.has_path(self.tree, edge[0], int_head):
+                                        pathx=nx.all_simple_paths(self.tree, edge[0], int_head, cutoff=None)
+                                        for item in pathx:
+                                            HDD=len(item)-1
+                                    else:
+                                        HDD=1
+                                else:
+                                    HDD=2
+                                            
+                return HDD
+--------------------
+    treegen.py:
+        """ treegen """
+        from math import log, exp
+        import random
+        import itertools as it
+        import functools
+        import operator
+        import copy
+        import bisect
+        
+        import networkx as nx
+        
+        from rfutils import the_only, partition, flatmap
+        from rfutils.nondet import nondet_map
+        
+        import depgraph
+        
+        
+        def endpoints_of(tree):
+            return [n for n in sorted(tree.nodes()) if tree.degree(n) == 1]
+        
+        def pruefer_code_for(tree):
+            # from https://www.math.upenn.edu/~wilf/website/CombinatorialAlgorithms.pdf
+            # Ch. 28, pp. 267--268
+            # This implementation closely follows this reference:
+            #@inbook{nijenhuis1978labeled,
+            #  title="Combinatorial Algorithms",
+            #  chapter="28",
+            #  edition = "2",
+            #  pages="267--274"
+            #  author = "Albert Nijenhuis and Herbert S. Wilf",
+            #  publisher = "Academic Press",
+            #  address = "New York",
+            #  series = "Computer Science and Applied Mathematics",
+            #  editor = "Werner Rheinboldt",
+            #  year = "1978"
+            # }    
+            tree = copy.deepcopy(tree)
+            while len(tree.edges()) > 1:
+                x = min(endpoints_of(tree))
+                _, a = the_only(tree.edges(x))
+                yield a
+                tree.remove_edge(x, a)
+        
+        def tree_edges_from_pruefer_code(code):
+            # https://www.math.upenn.edu/~wilf/website/CombinatorialAlgorithms.pdf
+            # Ch. 28
+            # This is O(n^2); Gottlieb et al. (2001) say there is an O(nlogn)
+            # decoding algorithm using heaps; I'll implement that if this turns
+            # out to be a bottleneck.
+            # Could use sympy.combinatorics.prufer.Prufer(code).tree_repr, but that's 2x slower
+            code = list(code)
+            l1 = set(range(len(code) + 2))
+            while code and len(l1) > 2:
+                x = min(l1.difference(code))
+                yield (x, code[0])
+                l1.remove(x)
+                code.pop(0)
+            assert len(l1) == 2
+            yield tuple(l1) # two things left in l1; make those the final edge
+        
+        def tree_from_pruefer_code(code):
+            edges = tree_edges_from_pruefer_code(code)
+            return nx.Graph(edges)
+        
+        def test_pruefer_code():
+            edges = {(2, 0), (0, 1), (2, 3)}
+            tree = nx.Graph(list(edges))
+            code = pruefer_code_for(tree)
+            assert list(code) == [0, 2]
+        
+        def test_pruefer_code_roundtrip():
+            edges = {(2, 0), (0, 1), (2, 3)}
+            tree = nx.Graph(list(edges))    
+            new_tree = tree_from_pruefer_code(pruefer_code_for(tree))
+            assert set(map(frozenset, new_tree.edges())) == set(map(frozenset, edges))
+        
+        def all_pruefer_codes(n):
+            return it.product(range(n), repeat=n-2)
+        
+        def random_pruefer_code(n):
+            return [random.choice(range(n)) for _ in range(n-2)]
+        
+        def random_undirected_tree(n):
+            assert n > 1
+            return tree_from_pruefer_code(random_pruefer_code(n))
+        
+        def random_directed_tree(n):
+            assert n > 1
+            return random_directed_tree_from(random_undirected_tree(n))
+        
+        def all_undirected_trees(n):
+            """ Generate all labeled undirected trees with n vertices. 
+            There are n ^ (n - 2) such trees. Only works for n > 1. """
+            # idea: generate all Pruefer codes of length n - 2,
+            # https://en.wikipedia.org/wiki/Pr%C3%BCfer_sequence
+            # then convert them to undirected trees.    
+            assert n > 1
+            return map(tree_from_pruefer_code, all_pruefer_codes(n))
+        
+        def test_all_undirected_trees():
+            # test we generate the right number
+            def count(xs):
+                result = 0
+                for x in xs:
+                    result += 1
+                return result
+            def test_count_equals_cayley(n):
+                assert count(all_undirected_trees(n)) == n ** (n - 2)
+            test_count_equals_cayley(2)
+            test_count_equals_cayley(5)
+        
+            # test they are unique
+            n = 4
+            ts = [
+                (
+                    frozenset(t.nodes()),
+                    frozenset(map(frozenset, t.edges())),
+                )
+                for t in all_undirected_trees(n)
+            ]
+            assert len(ts) == len(set(ts))
+            
+            # test correct number of nodes
+            assert all(len(nodes) == n for nodes, edges in ts)
+        
+            # test tree structure
+            nodes_in_edges = {
+                n
+                for nodes, edges in ts
+                for edge in edges
+                for n in edge
+            }
+            for nodes, edges in ts:
+                assert all(n in nodes_in_edges for n in nodes)
+        
+        def with_nodes(g, nodes):
+            g2 = type(g)()
+            g2.add_nodes_from(g.nodes())
+            g2.add_edges_from(g.edges())
+            g2.add_nodes_from(nodes)
+            return g2    
+        
+        def with_edges(g, edges):
+            g2 = type(g)()
+            g2.add_nodes_from(g.nodes())
+            g2.add_edges_from(g.edges())
+            g2.add_edges_from(edges)
+            return g2
+        
+        def nondecreasing_sequences_adding_to(n):
+            """ Yield all nondecreasing sequences of integers which add to n. """
+            def seqs_with_max(n, max_k):
+                if n == 0:
+                    yield []
+                else:
+                    for m in range(1, min(n, max_k) + 1):
+                        for seq in seqs_with_max(n - m, m):
+                            yield [m] + seq
+            return seqs_with_max(n, n)
+        
+        def all_undirected_forest_components(n):
+            """ Enumerate undirected forests with n nodes. """
+            # First get all the nondecreasing sequences that add to n
+            sequences = nondecreasing_sequences_adding_to(n)
+        
+            # Now for each sequence get all the forests
+            return flatmap(functools.partial(nondet_map, all_undirected_trees), sequences)
+        
+        def all_undirected_forests(n):
+            return map(forest_of_trees, all_undirected_forest_components(n))
+        
+        def all_directed_forest_components(n):
+            forests = all_undirected_forest_components(n)
+            return flatmap(functools.partial(nondet_map, directed_trees), forests)
+        
+        def all_directed_forests(n):
+            forests = all_directed_forest_components(n)
+            return map(forest_of_trees, forests)
+        
+        def forest_of_trees(trees):
+            """ Combine an iterable of trees into a forest graph. """
+            max_node = 0
+            first_time = True
+            for tree in trees:
+                if first_time:
+                    forest = type(tree)()
+                    first_time = False
+                edges = [(h+max_node, d+max_node) for h, d in tree.edges()]
+                forest.add_edges_from(edges)
+                max_node += max(tree.nodes())
+            return forest
+        
+        def directed_trees(undirected_tree):
+            """ Given an undirected tree, yield all possible rooted directed trees. """
+            edges = undirected_tree.edges()
+            for node in undirected_tree.nodes():
+                arcs = rooted_at(edges, node)
+                yield nx.DiGraph(arcs)
+        
+        def random_directed_tree_from(undirected_tree):
+            edges = undirected_tree.edges()
+            root = random.choice(undirected_tree.nodes())
+            arcs = rooted_at(edges, root)
+            return nx.DiGraph(arcs)
+        
+        def all_directed_trees(n):
+            """  Generate all rooted directed trees with n nodes. 
+            There are n ^ (n - 1) such trees. """
+            return flatmap(directed_trees, all_undirected_trees(n))
+        
+        def tree_has_consistent_head_direction(cmp, directed_tree):
+            return all(it.starmap(cmp, directed_tree.edges_iter()))
+        
+        tree_is_head_final = functools.partial(tree_has_consistent_head_direction, operator.gt)
+        tree_is_head_initial = functools.partial(tree_has_consistent_head_direction, operator.lt)
+        
+        def tree_is_partially_head_final(directed_tree, p):
+            num_edges = directed_tree.size()
+            desired_num_head_final = round(num_edges * p)
+            num_head_final = sum(d < h for h, d in directed_tree.edges_iter())
+            return num_head_final == desired_num_head_final
+        
+        def all_projective_trees(n):
+            return filter(depgraph.is_projective, all_undirected_trees(n))
+        
+        def all_head_initial_trees(n):
+            return filter(
+                tree_is_head_initial,
+                flatmap(directed_trees, all_undirected_trees(n))
+            )
+        
+        def all_head_final_trees(n):
+            return filter(
+                tree_is_head_final,
+                flatmap(directed_trees, all_undirected_trees(n))
+            )
+        
+        def pair_element(pair, x):
+            assert x in pair
+            one, two = pair
+            if one == x:
+                return one, two
+            else:
+                return two, one
+        
+        def only_one(xs):
+            """ Return whether exactly one element of xs is truthy. """
+            xs_iter = filter(None, iter(xs))
+            for x in xs_iter: # take the first thing that is truthy,
+                return not any(xs_iter) # return whether there are none after that one.
+            return False # case where none were truthy
+        
+        def at_most(n, xs):
+            """ Return whether at most n elements of xs are truthy. """
+            so_far = 0
+            for x in filter(None, xs):
+                so_far += 1
+                if so_far > n:
+                    return False
+            return True
+        
+        def rooted_at(edges, node):
+            """ Given edges of an undirected tree and some node, yield the arcs of a directed
+            tree with the same structure rooted at that node. """
+            relevant_edges, irrelevant_edges = partition(lambda e: node in e, edges)
+            irrelevant_edges = list(irrelevant_edges)
+            for edge in relevant_edges:
+                h, d = pair_element(edge, node)
+                yield (h, d)
+                for cont in rooted_at(irrelevant_edges, d):
+                    yield cont
+        
+        def num_directed_forests_with_components(n, k):
+            """ Number of possible directed forests with n nodes and k components. """
+            # from https://math.berkeley.edu/~mhaiman/math172-spring10/matrixtree.pdf
+            return choose(n - 1, k - 1) * n ** (n - k)
+        
+        def num_directed_forests(n):
+            """ Number of possible directed forests with n nodes. """
+            return sum(
+                num_directed_forests_with_components(n, k)
+                for k in range(1, n + 1)
+            )
+        
+        def test_rooted_at():
+            edges = [(1, 2), (1, 3), (3, 4)]
+            assert set(rooted_at(edges, 1)) == set(edges)
+            assert set(rooted_at(edges, 2)) == {(2, 1), (1, 3), (3, 4)}
+            assert set(rooted_at(edges, 3)) == {(3, 1), (1, 2), (3, 4)}
+            assert set(rooted_at(edges, 4)) == {(4, 3), (3, 1), (1, 2)}
+        
+        if __name__ == '__main__':
+            import nose
+            nose.runmodule()
+--------------------
+    SUD/
+        README.md:
+                Contains treebank data files
+                https://surfacesyntacticud.github.io/data/
+--------------------

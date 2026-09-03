@@ -1,0 +1,8 @@
+nose
+networkx
+-e git+https://github.com/Futrell/rfutils.git#egg=rfutils
+conllu
+networkx
+numpy
+matplotlib
+seaborn
